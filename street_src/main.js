@@ -76,7 +76,7 @@ const districtOf = (i) => DISTRICTS[Math.floor(i / PIECES_PER_DISTRICT) % DISTRI
 
 /* ---------------- renderer / scene (always daytime) ---------------- */
 const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); // phones: a touch below full sharpness, far fewer pixels to shade
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.getElementById('stage').appendChild(renderer.domElement);
@@ -111,7 +111,7 @@ const sky = (() => {
       float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
       float noise(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
         return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y); }
-      float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * noise(p); p = p * 2.03 + vec2(17.0, 9.0); a *= 0.5; } return s; }
+      float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + vec2(17.0, 9.0); a *= 0.5; } return s; }
       float fbm3(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 3; i++) { s += a * noise(p); p = p * 2.03 + vec2(17.0, 9.0); a *= 0.5; } return s; }
       float heap(vec2 p){ return 0.62 * fbm(p * 0.55) + 0.38 * fbm(p * 1.9 + 7.0); }
       void main(){
@@ -137,6 +137,7 @@ const sky = (() => {
 
 /* ---------------- materials ---------------- */
 const matCache = new Map();
+const PLAIN = new THREE.MeshLambertMaterial({ vertexColors: true }); // one material for all plain-coloured parts
 function mat(color) {
   let m = matCache.get(color);
   if (!m) { m = new THREE.MeshLambertMaterial({ color }); matCache.set(color, m); }
@@ -222,6 +223,20 @@ class Batch {
     for (let i = 0; i < 6; i++) bb.n.push(_v.x, _v.y, _v.z);
   }
   build(group) {
+    // Every plain-coloured, untextured part of a block is merged into one piece carrying its colours per vertex,
+    // so a block is a handful of draw calls instead of fifty.
+    const P = [], N = [], C = [];
+    for (const [material, b] of this.m) {
+      if (material.map || material.side !== THREE.FrontSide || material.transparent || material.alphaTest || material.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile || !material.isMeshLambertMaterial || material.emissive.getHex()) continue;
+      const { r, g, b: bl } = material.color; for (let i = 0; i < b.p.length; i += 3) C.push(r, g, bl);
+      for (let i = 0; i < b.p.length; i++) { P.push(b.p[i]); N.push(b.n[i]); }
+      this.m.delete(material);
+    }
+    if (P.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+      const mesh = new THREE.Mesh(g, PLAIN); mesh.userData.own = true; group.add(mesh);
+    }
     for (const [material, b] of this.m) {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(b.p, 3));
@@ -1356,14 +1371,15 @@ void main() {
   transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
 });
-function addShadow(model, holder) { // holder is the person as a whole: its height is the ground they stand on
-  const list = []; model.traverse((o) => { if (o.isSkinnedMesh) list.push(o); });
+function addShadow(model, holder) { // holder is the person as a whole: its height is the ground they stand on; returns the shadow meshes
+  const list = [], out = []; model.traverse((o) => { if (o.isSkinnedMesh) list.push(o); });
   for (const o of list) {
     const m = SHADOW_MAT.clone(), sh = new THREE.SkinnedMesh(o.geometry, m);
     sh.bind(o.skeleton, o.bindMatrix); sh.position.copy(o.position); sh.quaternion.copy(o.quaternion); sh.scale.copy(o.scale);
-    sh.frustumCulled = false; sh.renderOrder = 5; sh.onBeforeRender = () => { m.uniforms.uY.value = holder.matrixWorld.elements[13]; };
-    o.parent.add(sh);
+    sh.boundingSphere = o.boundingSphere.clone(); sh.boundingSphere.radius *= 1.4; sh.renderOrder = 5; sh.onBeforeRender = () => { m.uniforms.uY.value = holder.matrixWorld.elements[13]; };
+    o.parent.add(sh); out.push(sh);
   }
+  return out;
 }
 function makeKind(gltf, height, walk, idle, skins) {
   const root = gltf.scene, mats = new Map(); let lo = Infinity, hi = -Infinity; const v = new THREE.Vector3();
@@ -1371,7 +1387,8 @@ function makeKind(gltf, height, walk, idle, skins) {
   root.traverse((o) => {
     if (o.isBone) { o.getWorldPosition(v); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y); }
     if (o.isMesh) { // simple, cheap materials
-      o.frustumCulled = false; const m = o.material;
+      o.geometry.computeBoundingSphere(); o.boundingSphere = o.geometry.boundingSphere.clone(); o.boundingSphere.radius *= 1.6; // a generous fixed bound, so off-screen people are skipped cheaply
+      const m = o.material;
       if (!mats.has(m)) mats.set(m, Object.assign(new THREE.MeshLambertMaterial({ map: m.map, color: m.map ? '#ffffff' : m.color, alphaTest: m.transparent || m.alphaTest ? 0.5 : 0, side: m.transparent ? THREE.DoubleSide : m.side }), { name: m.name })); // keep two-sided parts two-sided, or hands and cuffs modelled inside-out vanish
       o.material = mats.get(m);
     }
@@ -1393,9 +1410,10 @@ Promise.all([mixamoAnimsGlb, guardGlb, bizmanGlb, claudiaGlb, nathanGlb, ericGlb
   makeKind(nathan, 2.1, rWalk, manIdle, [1, 0.5, 0.3, 0.22]);
   { // the main character: Nathan with brown skin, in his own white T-shirt and jeans
     const k = kinds[kinds.length - 1], look = k.makeLook({ skin: 0.34, tint: new THREE.Color('#ffffff'), jeans: JEANS[0] }), m = SkeletonUtils.clone(k.root);
-    m.traverse((o) => { if (o.isMesh) { o.material = look.get(o.material) || o.material; o.frustumCulled = false; } });
+    m.traverse((o) => { if (o.isMesh) { o.material = look.get(o.material) || o.material; o.boundingSphere = o.boundingSphere && o.boundingSphere.clone(); } });
     m.scale.multiplyScalar(k.scale * 1.01); m.position.y += k.lift; hero.obj.add(m); addShadow(m, hero.obj); hero.mixer = new THREE.AnimationMixer(m);
-    hero.acts = [k.idle, k.walk, k.walk.clone()].map((c, n) => { const a = hero.mixer.clipAction(c); a.play(); a.setEffectiveWeight(n ? 0 : 1); return a; }); // there is no run animation for him, so running is the walk played faster
+    const run = retarget(bake(clip(anim, 'run').clip, anim.scene, eric.scene, 0.8).clip, eric.scene, k.root).clip; // a real running animation, fitted to him
+    hero.acts = [k.idle, k.walk, run].map((c, n) => { const a = hero.mixer.clipAction(c); a.play(); a.setEffectiveWeight(n ? 0 : 1); return a; });
     hero.stride = k.stride;
   }
   makeKind(eric, 2.1, rWalk, manIdle, [1, 0.5, 0.3, 0.2]);
@@ -1407,11 +1425,11 @@ function populate(piece) { // put walkers on both sidewalks of a road piece
   const r = rng(piece.seed * 7919 + 5), L = piece.pc.L;
   for (let i = 0, n = Math.round(L / 40 * piece.crowd); i < n; i++) {
     const k = kinds[Math.floor(r() * kinds.length)], obj = new THREE.Group(), inner = SkeletonUtils.clone(k.root), look = pick(r, k.looks);
-    inner.traverse((o) => { if (o.isMesh) o.material = look.get(o.material) || o.material; });
-    inner.scale.multiplyScalar(k.scale * (0.95 + r() * 0.09)); inner.position.y += k.lift; obj.add(inner); addShadow(inner, obj);
+    inner.traverse((o) => { if (o.isMesh) { o.material = look.get(o.material) || o.material; o.boundingSphere = o.boundingSphere && o.boundingSphere.clone(); } });
+    inner.scale.multiplyScalar(k.scale * (0.95 + r() * 0.09)); inner.position.y += k.lift; obj.add(inner); const shadows = addShadow(inner, obj);
     const mixer = new THREE.AnimationMixer(inner), speed = 1.0 + r() * 0.5, dir0 = r() < 0.5 ? 1 : -1;
     const walk = mixer.clipAction(k.walk), idle = mixer.clipAction(k.idle || k.walk); walk.play(); idle.play(); idle.setEffectiveWeight(0); mixer.update(r() * 2);
-    people.push({ obj, mixer, walk, idle, stride: k.stride || 1.45, wWalk: 1, v: dir0 * speed, face: dir0 > 0 ? Math.PI : 0, piece, pc: piece.pc, t: 1 + r() * (L - 2), u: 0, u0: (r() < 0.5 ? -1 : 1) * (piece.lo + 0.45 + r() * (piece.hi - piece.lo - 0.6)), dir: dir0, speed, stuck: 0, id: people.length });
+    people.push({ obj, shadows,  mixer, walk, idle, stride: k.stride || 1.45, wWalk: 1, v: dir0 * speed, face: dir0 > 0 ? Math.PI : 0, piece, pc: piece.pc, t: 1 + r() * (L - 2), u: 0, u0: (r() < 0.5 ? -1 : 1) * (piece.lo + 0.45 + r() * (piece.hi - piece.lo - 0.6)), dir: dir0, speed, stuck: 0, id: people.length });
     const me = people[people.length - 1], mine = people.filter((q) => q.piece === piece && q !== me);
     for (let tries = 0; tries < 14; tries++) { // start in a clear spot: not inside an object or another person
       const au = Math.abs(me.u0), sg = Math.sign(me.u0);
@@ -1491,9 +1509,11 @@ function updatePeople(dt, cam) {
     p.walk.timeScale = clamp(sp / p.stride, 0.45, 1.4);                         // steps match ground speed, so feet do not slide
     _v.copy(p.obj.position).applyMatrix4(piece.g.matrix);
     const d2 = (_v.x - cam.x) ** 2 + (_v.z - cam.z) ** 2;
-    p.obj.visible = d2 < 95 * 95;
-    if (d2 < 50 * 50) p.mixer.update(dt);                                        // near: animate every frame
-    else if (p.obj.visible && (frameNo + p.id) % 2 === 0) p.mixer.update(dt * 2); // far: every other frame
+    p.obj.visible = d2 < 70 * 70; // beyond this they are lost in the haze anyway
+    const shadowOn = d2 < 30 * 30; if (shadowOn !== p.shadowOn) { p.shadowOn = shadowOn; for (const sh of p.shadows) sh.visible = shadowOn; } // shadows only close by
+    if (!p.obj.visible) continue;
+    if (d2 < 28 * 28) p.mixer.update(dt);                                        // near: animate every frame
+    else if ((frameNo + p.id) % 2 === 0) p.mixer.update(dt * 2);               // farther: every other frame
   }
 }
 // Moves the player out of anything solid they have stepped into
@@ -1544,7 +1564,7 @@ function horn(loud) {
 function updateSound(dt) {
   if (!sfx.ctx || sfx.ctx.state !== 'running') return;
   if (hero.speed > 0.4) { // one footstep per stride length covered
-    sfx.phase += hero.speed * dt / (hero.speed > 2.5 ? 1.05 : 0.78);
+    sfx.phase += hero.speed * dt / (hero.speed > 2.5 ? 1.7 : 0.78);
     if (sfx.phase >= 1) { sfx.phase -= 1; footstep(hero.speed > 2.5 ? 1 : 0.7); }
   } else sfx.phase = 0.6;
   let near = 0; for (const c of cars) { const [x, z] = carPos(c), d2 = (x - hero.x) ** 2 + (z - hero.z) ** 2; near += (0.25 + c.v / 9) / (1 + d2 / 90); }
@@ -1622,7 +1642,7 @@ new GLTFLoader().parse(carsGlb.buffer.slice(carsGlb.byteOffset, carsGlb.byteOffs
 const carPos = (c) => (c.axis === 'z' ? [c.line * PITCH + F - c.dir * c.lane, c.s] : [c.s, c.line * PITCH + F + c.dir * c.lane]); // keep right
 function spawnCar() {
   const axis = Math.random() < 0.5 ? 'z' : 'x', hi = Math.floor(hero.x / PITCH), hj = Math.floor(hero.z / PITCH), along = axis === 'z' ? hero.z : hero.x;
-  const c = { axis, line: (axis === 'z' ? hi : hj) + Math.floor(Math.random() * 4) - 1, dir: Math.random() < 0.5 ? 1 : -1, lane: LANES[Math.floor(Math.random() * 2)], s: along + (Math.random() * 2 - 1) * 150, v: 0, vmax: 6.5 + Math.random() * 4.5 };
+  const c = { axis, line: (axis === 'z' ? hi : hj) + Math.floor(Math.random() * 4) - 1, dir: Math.random() < 0.5 ? 1 : -1, lane: LANES[Math.floor(Math.random() * 2)], s: along + (Math.random() * 2 - 1) * 120, v: 0, vmax: 6.5 + Math.random() * 4.5 };
   const [x, z] = carPos(c), off = c.s - Math.floor(c.s / PITCH) * PITCH;
   if (Math.hypot(x - hero.x, z - hero.z) < 38 || off < RW + 4) return;                                                   // not right beside you, not inside a junction
   if (cars.some((o) => o.axis === c.axis && o.line === c.line && o.dir === c.dir && o.lane === c.lane && Math.abs(o.s - c.s) < 11)) return;
@@ -1637,7 +1657,8 @@ function updateTraffic(dt) {
   for (let n = 0; n < 5 && cars.length < CAR_MAX; n++) spawnCar();
   for (let i = cars.length - 1; i >= 0; i--) {
     const c = cars[i], half = c.kind.half, [x, z] = carPos(c);
-    if (Math.hypot(x - hero.x, z - hero.z) > 175) { scene.remove(c.obj); cars.splice(i, 1); continue; } // left the area
+    const far = Math.hypot(x - hero.x, z - hero.z); if (far > 140) { scene.remove(c.obj); cars.splice(i, 1); continue; } // left the area
+    c.obj.visible = far < 110;
     let want = c.vmax;
     for (const o of cars) { // the car in front, in the same lane
       if (o === c || o.axis !== c.axis || o.line !== c.line || o.dir !== c.dir || o.lane !== c.lane) continue;
@@ -1825,8 +1846,8 @@ function frame() {
   const mag = Math.min(1, Math.hypot(mx, my)), fx = Math.sin(camYaw), fz = Math.cos(camYaw);
   let speed = 0;
   if (mag > 0.1) {
-    const run = mag > 0.8 && (joy.id !== null || keys.ShiftLeft || keys.ShiftRight);
-    speed = run ? 3.3 : 1.75 * Math.min(1, mag / 0.8);
+    const run = mag > 0.85 && (joy.id !== null || keys.ShiftLeft || keys.ShiftRight); // stick pushed right to the edge: run
+    speed = run ? 5.2 : 1.75 * Math.min(1, mag / 0.8);
     let dx = fx * my - fz * mx, dz = fz * my + fx * mx; const dl = Math.hypot(dx, dz); dx /= dl; dz /= dl;
     hero.heading += angDiff(Math.atan2(dx, dz), hero.heading) * Math.min(1, dt * 9);
     const nx = hero.x + dx * speed * dt, nz = hero.z + dz * speed * dt, lim = F - 0.45, ox = hero.x, oz = hero.z;
@@ -1845,7 +1866,7 @@ function frame() {
   if (hero.mixer) { // blend idle, walk and run by speed
     const v = hero.speed, goal = [v < 0.15 ? 1 : 0, v >= 0.15 && v < 2.5 ? 1 : 0, v >= 2.5 ? 1 : 0];
     for (let i = 0; i < 3; i++) { hero.w[i] += (goal[i] - hero.w[i]) * Math.min(1, dt * 7); hero.acts[i].setEffectiveWeight(hero.w[i]); }
-    hero.acts[1].timeScale = clamp(v / hero.stride, 0.5, 1.5); hero.acts[2].timeScale = clamp(v / hero.stride, 1.2, 2.0);
+    hero.acts[1].timeScale = clamp(v / hero.stride, 0.5, 1.5); hero.acts[2].timeScale = clamp(v / 5.2, 0.75, 1.15);
     hero.mixer.update(dt);
   }
 
@@ -1866,7 +1887,7 @@ function frame() {
   updateSignals(); updateTraffic(dt); updateSound(dt);
   windU.value = performance.now() / 1000;
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
 }
-if (location.hash.includes('dbg')) window.__dbg = { sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, step: (dt) => updatePeople(dt, camera.position), look: (y) => { camYaw = y; hero.heading = y; } }; // testing only
-requestAnimationFrame(frame);
+function loop() { frame(); requestAnimationFrame(loop); }
+if (location.hash.includes('dbg')) window.__dbg = { sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, step: (dt) => updatePeople(dt, camera.position), look: (y) => { camYaw = y; hero.heading = y; } }; // testing only
+requestAnimationFrame(loop);
