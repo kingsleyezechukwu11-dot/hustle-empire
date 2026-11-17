@@ -75,7 +75,7 @@ function weighted(r, table) {
 const districtOf = (i) => DISTRICTS[Math.floor(i / PIECES_PER_DISTRICT) % DISTRICTS.length];
 
 /* ---------------- renderer / scene (always daytime) ---------------- */
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1334,6 +1334,37 @@ function tinted(m, P) {
   };
   c.customProgramCacheKey = () => 'people-tint'; return c;
 }
+// Shadows: every person is drawn a second time, flattened onto the ground along the sun's rays,
+// so the shadow is their real outline and moves with every step. The stencil stops overlapping
+// parts of a shadow from darkening twice.
+const SUN_DIR = new THREE.Vector3(60, 110, 45).normalize();
+const SHADOW_MAT = new THREE.ShaderMaterial({
+  uniforms: { uY: { value: 0 }, uSun: { value: SUN_DIR } },
+  vertexShader: `#include <common>
+#include <skinning_pars_vertex>
+uniform float uY; uniform vec3 uSun; varying float vD;
+void main() {
+  #include <skinbase_vertex>
+  #include <begin_vertex>
+  #include <skinning_vertex>
+  vec4 wp = modelMatrix * vec4(transformed, 1.0);
+  float h = max(wp.y - uY, 0.0);
+  wp.xz -= uSun.xz * (h / uSun.y); wp.y = uY + 0.025;
+  vec4 mv = viewMatrix * wp; vD = -mv.z; gl_Position = projectionMatrix * mv;
+}`,
+  fragmentShader: `varying float vD; void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, 0.42 * (1.0 - smoothstep(45.0, 70.0, vD))); }`,
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+});
+function addShadow(model, holder) { // holder is the person as a whole: its height is the ground they stand on
+  const list = []; model.traverse((o) => { if (o.isSkinnedMesh) list.push(o); });
+  for (const o of list) {
+    const m = SHADOW_MAT.clone(), sh = new THREE.SkinnedMesh(o.geometry, m);
+    sh.bind(o.skeleton, o.bindMatrix); sh.position.copy(o.position); sh.quaternion.copy(o.quaternion); sh.scale.copy(o.scale);
+    sh.frustumCulled = false; sh.renderOrder = 5; sh.onBeforeRender = () => { m.uniforms.uY.value = holder.matrixWorld.elements[13]; };
+    o.parent.add(sh);
+  }
+}
 function makeKind(gltf, height, walk, idle, skins) {
   const root = gltf.scene, mats = new Map(); let lo = Infinity, hi = -Infinity; const v = new THREE.Vector3();
   root.updateMatrixWorld(true);
@@ -1363,7 +1394,7 @@ Promise.all([mixamoAnimsGlb, guardGlb, bizmanGlb, claudiaGlb, nathanGlb, ericGlb
   { // the main character: Nathan with brown skin, in his own white T-shirt and jeans
     const k = kinds[kinds.length - 1], look = k.makeLook({ skin: 0.34, tint: new THREE.Color('#ffffff'), jeans: JEANS[0] }), m = SkeletonUtils.clone(k.root);
     m.traverse((o) => { if (o.isMesh) { o.material = look.get(o.material) || o.material; o.frustumCulled = false; } });
-    m.scale.multiplyScalar(k.scale * 1.01); m.position.y += k.lift; hero.obj.add(m); hero.mixer = new THREE.AnimationMixer(m);
+    m.scale.multiplyScalar(k.scale * 1.01); m.position.y += k.lift; hero.obj.add(m); addShadow(m, hero.obj); hero.mixer = new THREE.AnimationMixer(m);
     hero.acts = [k.idle, k.walk, k.walk.clone()].map((c, n) => { const a = hero.mixer.clipAction(c); a.play(); a.setEffectiveWeight(n ? 0 : 1); return a; }); // there is no run animation for him, so running is the walk played faster
     hero.stride = k.stride;
   }
@@ -1377,7 +1408,7 @@ function populate(piece) { // put walkers on both sidewalks of a road piece
   for (let i = 0, n = Math.round(L / 40 * piece.crowd); i < n; i++) {
     const k = kinds[Math.floor(r() * kinds.length)], obj = new THREE.Group(), inner = SkeletonUtils.clone(k.root), look = pick(r, k.looks);
     inner.traverse((o) => { if (o.isMesh) o.material = look.get(o.material) || o.material; });
-    inner.scale.multiplyScalar(k.scale * (0.95 + r() * 0.09)); inner.position.y += k.lift; obj.add(inner);
+    inner.scale.multiplyScalar(k.scale * (0.95 + r() * 0.09)); inner.position.y += k.lift; obj.add(inner); addShadow(inner, obj);
     const mixer = new THREE.AnimationMixer(inner), speed = 1.0 + r() * 0.5, dir0 = r() < 0.5 ? 1 : -1;
     const walk = mixer.clipAction(k.walk), idle = mixer.clipAction(k.idle || k.walk); walk.play(); idle.play(); idle.setEffectiveWeight(0); mixer.update(r() * 2);
     people.push({ obj, mixer, walk, idle, stride: k.stride || 1.45, wWalk: 1, v: dir0 * speed, face: dir0 > 0 ? Math.PI : 0, piece, pc: piece.pc, t: 1 + r() * (L - 2), u: 0, u0: (r() < 0.5 ? -1 : 1) * (piece.lo + 0.45 + r() * (piece.hi - piece.lo - 0.6)), dir: dir0, speed, stuck: 0, id: people.length });
@@ -1831,7 +1862,6 @@ function frame() {
   groundMesh.position.x = hero.x; groundMesh.position.z = hero.z;
   sky.position.set(camera.position.x, -20, camera.position.z); skyU.value = performance.now() / 1000;
   sun.position.set(hero.x + 60, 110, hero.z + 45); sun.target.position.set(hero.x, 0, hero.z);
-
   updatePeople(dt, camera.position);
   updateSignals(); updateTraffic(dt); updateSound(dt);
   windU.value = performance.now() / 1000;
