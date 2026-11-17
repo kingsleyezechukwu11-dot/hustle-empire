@@ -1,0 +1,33 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "street",
+      "runtimeExecutable": "/usr/bin/python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "assets/street"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "sheet",
+      "runtimeExecutable": "/usr/bin/python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8766",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "/private/tmp/claude-501/-Users-ezechukwukingsleyorji-Library-Application-Support-Claude-scratch-workspaces-ccc3b261-9a8b-41d2-ab41-0b69402e6d88-375d688e-e5db-4a96-94e3-33e9afc9e9ec-scratch-2026-11-16-73b8a9/086c38be-32e7-4bbb-ae7b-20b77794eb98/scratchpad/sheet3"
+      ],
+      "port": 8766
+    }
+  ]
+}
