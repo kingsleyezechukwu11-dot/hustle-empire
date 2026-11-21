@@ -87,7 +87,7 @@ test('1.2 review: the count lands exactly on the new balance, even when the targ
 test('1.2 review: main.js sets game.rides only from logic.buyRide and game.ride only when starting', () => {
   const src = readText('street_src/main.js'); if (src === null) return;   /* no file access on this runner: skipped */
   const all = (re) => { const out = []; let m; while ((m = re.exec(src))) out.push(m[1].trim()); return out; };
-  assertEqual(all(/game\.rides\s*=(?!=)\s*([^;]+);/g), ['took.rides']);
+  assertEqual(all(/game\.rides\s*=(?!=)\s*([^;]+);/g), ['logic.startRides(game.rides, CONFIG)', 'took.rides']);   /* (the first: the free rides everybody starts with, CONFIG.startRides, given when the game loads) */
   assertEqual(all(/game\.ride\s*=(?!=)\s*([^;]+);/g), ['id']);
   const at = src.indexOf('function pickBuy(id)'), body = at < 0 ? '' : src.slice(at, src.indexOf('\nfunction ', at + 10));
   assert(body.indexOf('logic.buyRide(game, id, CONFIG)') > 0, 'pickBuy does not go through logic.buyRide');

@@ -8,8 +8,8 @@ const T = CONFIG.transport;
 test('config: start money and prices are the brief\'s', () => {
   assertEqual(CONFIG.startMoney, 100000);
   assertEqual([T.walk.price, T.bicycle.price, T.scooter.price, T.car.price], [0, 25000, 60000, 400000]);
-  assertEqual([T.walk.speed, T.bicycle.speed, T.scooter.speed, T.car.speed], [1, 1.8, 2.6, 3.2]);
-  assertEqual(T.walk.sprint, 1.6); assertEqual(T.car.turn, 0.55); assertEqual(T.car.bigPackages, true);
+  assertEqual([T.walk.speed, T.bicycle.speed, T.scooter.speed, T.car.speed], [1, 3.4, 5, 6.4]);
+  assertEqual(T.walk.sprint, 2.6); assertEqual(T.car.turn, 0.55); assertEqual(T.car.bigPackages, true);
   assertEqual(CONFIG.pay, { min: 3000, max: 15000 }); assertEqual(CONFIG.treatFee, 3000); assertEqual(CONFIG.lateShare, 0.4);
 });
 test('config: where each ride may go', () => {
@@ -137,3 +137,27 @@ test('money never goes below 0 after any sequence', () => {
     assert(Math.abs(start + got - spent - money) < 1e-3, 'the books balance');
   }
 });
+
+/* ---- police chase ---- */
+import { chaseFine, rideSpeed as rideSpeedFn } from '../logic.js';
+const rideSpeedOf = (id) => rideSpeedFn(id, CONFIG);
+test('chaseFine: stopping costs the usual fee, running and being caught costs more, and it grows with the level', () => {
+  assertEqual(chaseFine(1, false, CONFIG), 1500); assertEqual(chaseFine(1, true, CONFIG), 3800); assert(chaseFine(5, false, CONFIG) > chaseFine(1, false, CONFIG));
+  for (let L = 1; L <= 10; L++) assert(chaseFine(L, true, CONFIG) > chaseFine(L, false, CONFIG), 'level ' + L);
+  assertEqual(chaseFine(NaN, false, CONFIG), 1500); assertEqual(chaseFine(-3, true, CONFIG), 3800); assertEqual(chaseFine(1, true, {}), 0);
+});
+test('chase: the car can outrun a patrol on a straight, the scooter and the bicycle cannot, and nothing is caught or lost in an instant', () => {
+  const C = CONFIG.police.chase; assert(rideSpeedOf('car') > C.speed && rideSpeedOf('scooter') < C.speed && rideSpeedOf('bicycle') < C.speed);
+  assert(C.trapTime >= 2 && C.pullOver >= 1 && C.loseTime >= 3 && C.hail >= 3 && C.gone > C.loseFar && C.loseFar > C.see, 'timings');
+  const S = CONFIG.stops, sprint = CONFIG.walkSpeed * CONFIG.transport.walk.sprint; assert(S.agberoSpeed < sprint && S.officerSpeed < sprint && S.agberoSpeed > CONFIG.walkSpeed && S.officerSpeed > CONFIG.walkSpeed, 'on foot you can outrun them, but not out-walk them');
+});
+
+/* ---- joining ---- */
+import { userName, userProblem, userFree } from '../logic.js';
+test('usernames: tidied to small letters, digits and _; too short, bad start and taken ones are refused; a free one is offered', () => {
+  assertEqual(userName('  Kingsley Orji! '), 'kingsleyorji'); assertEqual(userName('A_b-9'), 'a_b9'); assertEqual(userName('x'.repeat(40)).length, 15); assertEqual(userName(null), '');
+  assertEqual(userProblem('ab', []), 'Use 3 or more letters'); assertEqual(userProblem('9lives', []), 'Start with a letter'); assertEqual(userProblem('Good', []), 'Letters, numbers and _ only');
+  assertEqual(userProblem('leo', ['Leo']), 'That username is taken'); assertEqual(userProblem('leo2', ['Leo']), ''); assertEqual(userProblem('tunde', undefined), '');
+  assertEqual(userFree('Leo', ['Leo']), 'leo2'); assertEqual(userFree('Leo', ['Leo', 'leo2']), 'leo3'); assertEqual(userFree('Ada', []), 'ada'); assertEqual(userFree('7', []), 'player7'); assert(!userProblem(userFree('', ['player_']), ['player_']));
+});
+test('start: the bicycle and the scooter are yours from the start, the car is not', () => { assertEqual(CONFIG.startRides, ['bicycle', 'scooter']); assert(CONFIG.transport.car.price > 0); });

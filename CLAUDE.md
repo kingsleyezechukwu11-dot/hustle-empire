@@ -29,5 +29,6 @@ Run the last line from a folder outside the project. It needs a Cloudflare sign-
 ## Where things are
 - `street_src/models/` game models and `CREDITS.txt` (keep credits up to date for every download).
 - `build/vehicles_src/` raw bike, scooter and skateboard models for a later stage.
+- `tools/slim_vehicle.mjs` turns a downloaded vehicle into a game-sized one (see the top of the file; it needs `@gltf-transform/core`, `@gltf-transform/functions`, `@gltf-transform/extensions`, `meshoptimizer` and `sharp` installed in the folder you run it from). The makes you can choose are listed in `STYLES` in `main.js`; police vehicles are loaded with `vehLoad(..., { police: true })`.
 - `tools/` build and model tools (`slim_char.py`, `shrink_glb.py`, `merge_glb.py`, `build_web.mjs`).
 - `sheets/` picture sheets shown to the owner.

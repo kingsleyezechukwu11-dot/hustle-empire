@@ -6,9 +6,9 @@ import { rideSpeed, footSpeed, rideTurn, mayGo, ZONES, rideStep, rideAim, routeF
 const RIDES = rideIds(CONFIG), PKGS = Object.keys(CONFIG.packages), near = (a, b, e = 1e-9) => Math.abs(a - b) <= e;
 
 /* ---- speeds ---- */
-test('footSpeed: walk 1.75, sprint 2.8', () => { assertEqual(CONFIG.walkSpeed, 1.75); assertEqual(footSpeed(false, CONFIG), 1.75); assert(near(footSpeed(true, CONFIG), 2.8)); });
+test('footSpeed: walk 2, sprint 5.2', () => { assertEqual(CONFIG.walkSpeed, 2); assertEqual(footSpeed(false, CONFIG), 2); assert(near(footSpeed(true, CONFIG), 5.2)); });
 test('rideSpeed: walking speed x each ride\'s multiple', () => {
-  assert(near(rideSpeed('walk', CONFIG), 1.75)); assert(near(rideSpeed('bicycle', CONFIG), 3.15)); assert(near(rideSpeed('scooter', CONFIG), 4.55)); assert(near(rideSpeed('car', CONFIG), 5.6));
+  assert(near(rideSpeed('walk', CONFIG), 2)); assert(near(rideSpeed('bicycle', CONFIG), 6.8)); assert(near(rideSpeed('scooter', CONFIG), 10)); assert(near(rideSpeed('car', CONFIG), 12.8));
   for (const id of RIDES) assert(near(rideSpeed(id, CONFIG), CONFIG.walkSpeed * CONFIG.transport[id].speed));
   assertEqual(rideSpeed('rocket', CONFIG), 0); assertEqual(rideSpeed(undefined, CONFIG), 0); assertEqual(rideSpeed('toString', CONFIG), 0);
 });

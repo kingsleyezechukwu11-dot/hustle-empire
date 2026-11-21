@@ -32,8 +32,17 @@ export const CONFIG = {
     big: { name: 'Big', payMult: 1.6, value: [80000, 200000], chance: 2, big: true },
   },
 
+  /* ---- signing in ---- */
+  // The game's Google sign-in client id: Google Cloud project "Blocktown" (blocktown-515417), client "Blocktown web", allowed on
+  // https://hustle-empire.postteller.workers.dev and http://localhost:8779. This id is public by design (it is not a secret; no client secret is used).
+  // Empty: the Google button says it is not connected yet.
+  googleClientId: '990983328089-1qht74dbcemp0i84peiv0c3e577ek1au.apps.googleusercontent.com',
+
+  /* ---- what everybody has from the start, free (walking is always free) ---- */
+  startRides: ['bicycle', 'scooter'],   // these show as yours on the travel card; the car must be bought
+
   /* ---- moving ---- */
-  walkSpeed: 1.75,             // metres a second at a walk; every other speed is a multiple of this
+  walkSpeed: 2,                // metres a second at a walk; every other speed is a multiple of this
 
   /* ---- transport ----
      price in naira; speed = multiple of walking speed; sprint = extra multiple while running (walk only);
@@ -45,10 +54,10 @@ export const CONFIG = {
      payRate = how much of the per-metre pay it earns (set so that each step up, walk < bicycle < scooter < car, earns about 15% more
      for a minute of play than the one before, while pay stays inside the range); cam = how far back the camera sits (1 = on foot). */
   transport: {
-    walk: { name: 'Walk', price: 0, speed: 1, sprint: 1.6, trip: 0.7, pace: 1.25, payRate: 1, cam: 1, go: { road: true, pavement: true, alley: true, market: true, indoors: true } },
-    bicycle: { name: 'Bicycle', price: 25000, speed: 1.8, accel: 2.2, brake: 5, turnRate: 2.6, pivot: 0.9, reverse: 0, trip: 1, pace: 0.8, payRate: 1.03, cam: 1.1, go: { road: true, pavement: true, alley: true, market: false, indoors: false } },
-    scooter: { name: 'Scooter', price: 60000, speed: 2.6, accel: 3, brake: 6.5, turnRate: 2.4, pivot: 0, reverse: 0.8, trip: 1.4, pace: 0.8, payRate: 0.86, cam: 1.25, go: { road: true, pavement: false, alley: false, market: false, indoors: false } },
-    car: { name: 'Car', price: 400000, speed: 3.2, turn: 0.55, accel: 3.2, brake: 7.5, turnRate: 2.4, pivot: 0, reverse: 1.4, trip: 1.7, pace: 0.8, payRate: 0.77, cam: 1.6, bigPackages: true, go: { road: true, pavement: false, alley: false, market: false, indoors: false } },
+    walk: { name: 'Walk', price: 0, speed: 1, sprint: 2.6, trip: 0.7, pace: 1.25, payRate: 1, cam: 1, go: { road: true, pavement: true, alley: true, market: true, indoors: true } },
+    bicycle: { name: 'Bicycle', price: 25000, speed: 3.4, accel: 4, brake: 5, turnRate: 2.6, pivot: 0.9, reverse: 0, trip: 1.5, pace: 0.78, payRate: 0.52, cam: 1.1, go: { road: true, pavement: true, alley: true, market: false, indoors: false } },
+    scooter: { name: 'Scooter', price: 60000, speed: 5, accel: 6, brake: 8, turnRate: 2.4, pivot: 0, reverse: 0.8, trip: 2, pace: 0.78, payRate: 0.44, cam: 1.25, go: { road: true, pavement: false, alley: false, market: false, indoors: false } },
+    car: { name: 'Car', price: 400000, speed: 6.4, turn: 0.55, accel: 7, brake: 10, turnRate: 2.4, pivot: 0, reverse: 1.4, trip: 2.8, pace: 0.8, payRate: 0.36, cam: 1.6, bigPackages: true, go: { road: true, pavement: false, alley: false, market: false, indoors: false } },
   },
 
   /* ---- riding ----
@@ -61,8 +70,27 @@ export const CONFIG = {
   ride: { turnFrom: 0.5, turnFull: 2.1, slowTurn: 0.4, backTime: 1.5, backDist: 3, stuck: 3, park: 12, reach: 2.2, autoOff: 9, fade: 0.6, stopped: 0.35, unstick: 0.9, startGuard: 400 },
 
   /* ---- being stopped for money (the old walk-up area boy / officer; Phase 3 replaces it) ---- */
-  stops: { perLeg: 1 },        // at most this many stops on the way to the pickup, and again on the way to the delivery
+  // perLeg = at most this many stops on the way to the pickup, and again on the way to the delivery. On foot you can get away: he must come
+  // within `reach` metres to stop you, he runs at agberoSpeed / officerSpeed metres a second (slower than your sprint, faster than your walk),
+  // and he gives up when you are `lose` metres off or after giveUp seconds.
+  stops: { perLeg: 1, reach: 1.15, agberoSpeed: 3.9, officerSpeed: 3.7, lose: 24, giveUp: 14 },
 
+
+  /* ---- police on the road ---- */
+  // patrolChance = how often a car that joins the traffic is a police patrol (never two at once).
+  // chase: see = metres at which a patrol notices you riding on an errand; chance = how often it then waves you down (once an errand at most);
+  // hail = seconds you have to pull over; hailPace = share of its top speed while it is only asking; speed / accel / turn = how it drives
+  // when it comes after you (the car is faster on a straight, the scooter and the bicycle are not: they must out-turn it);
+  // stopped / stopNear / stopTime / stopGap = you count as having stopped for it below this speed, within this many metres, for this long, once it is this close;
+  // catchGap / catchTime = metres off your tail, and seconds it must stay there, to catch you; loseFar / loseTime = metres away, and seconds
+  // you must stay that far, to lose it; gone = metres at which it is lost at once; cool = seconds before any patrol tries again;
+  // feeBase + feePerLevel x level = what stopping costs; fineMult = how many times that when you ran and were caught; round = to the nearest.
+  // (block: once you run it aims ahead of you by up to `lead` metres; when it is blockAhead metres in front and within blockNear it swings across
+  //  your path and stops for blockTime seconds, at most once every blockEvery seconds, and gives the block up if you get blockFar away.
+  //  pullOver = seconds stopped, while it is only asking, that count as pulling over. trapTime = seconds you must be standing still with it
+  //  within stopNear metres to be CAUGHT once you have run: being blocked is not being caught, having nowhere left to go is.)
+  police: { patrolChance: 0.2, chase: { see: 34, chance: 0.7, hail: 4, hailPace: 0.85, speed: 11.6, accel: 6.5, brake: 11, turn: 1.9, stopped: 0.9, stopNear: 9, pullOver: 1.2, stopGap: 9, trapTime: 2.6,
+    passWide: 3.3, lead: 16, blockAhead: 8, blockNear: 16, blockTime: 2.4, blockEvery: 7, blockFar: 22, loseFar: 55, loseTime: 6, gone: 115, cool: 45, feeBase: 1000, feePerLevel: 500, fineMult: 2.5, round: 100 } },
 
   /* ---- stamina (Phase 3) ---- */
   // stamina: { },

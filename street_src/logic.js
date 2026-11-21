@@ -195,3 +195,27 @@ export function freshGame(CONFIG) { return CONFIG.startMoney; }
 
 // A saved number is kept as it is (never below 0); anything else starts fresh.
 export function loadMoney(saved, CONFIG) { return typeof saved === 'number' && isFinite(saved) ? Math.max(0, saved) : freshGame(CONFIG); }
+
+/* ---------------- police ---------------- */
+// What the officer takes: the usual fee when you stopped for him, fineMult times that when you ran and were caught. Never below 0.
+export function chaseFine(level, ran, CONFIG) {
+  const C = CONFIG && CONFIG.police && CONFIG.police.chase; if (!C) return 0; const L = Math.max(1, Math.floor(num(level)) || 1), r = pos(C.round, 1);
+  return Math.max(0, Math.round((pos(C.feeBase, 0) + pos(C.feePerLevel, 0) * L) * (ran ? pos(C.fineMult, 1) : 1) / r) * r);
+}
+
+/* ---------------- usernames ---------------- */
+// A username: small letters, digits and _ only, at most 15. userName tidies what was typed (or a person's name) into that shape.
+export function userName(text) { return String(text === undefined || text === null ? '' : text).toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9_]/g, '').slice(0, 15); }
+// What is wrong with a username ('' when it may be used): too short, not starting with a letter, or already somebody's (taken: names in any case).
+export function userProblem(user, taken) {
+  const u = String(user || ''); if (u.length < 3) return 'Use 3 or more letters'; if (u !== userName(u)) return 'Letters, numbers and _ only'; if (!/^[a-z]/.test(u)) return 'Start with a letter';
+  return (taken || []).some((t) => userName(t) === u) ? 'That username is taken' : '';
+}
+// The nearest free username to the one wanted: itself, or with a number on the end.
+export function userFree(want, taken) {
+  let base = userName(want); if (!/^[a-z]/.test(base)) base = 'player' + base; while (base.length < 3) base += '_'; if (!userProblem(base, taken)) return base;
+  for (let n = 2; n < 1000; n++) { const u = base.slice(0, 15 - String(n).length) + n; if (!userProblem(u, taken)) return u; } return base;
+}
+
+// The rides you own once the free ones everybody starts with (CONFIG.startRides) are counted in. A new object: nothing is changed in place.
+export function startRides(rides, CONFIG) { const out = Object.assign({}, rides); for (const id of (CONFIG && CONFIG.startRides) || []) if (rideOf(id, CONFIG)) out[id] = true; return out; }

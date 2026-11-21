@@ -137,3 +137,20 @@ ride_scooter.glb  "Vino" by minghauLoh (https://sketchfab.com/3d-models/vino-220
 Agberos (street touts), CC-BY 4.0, from sketchfab.com; face shapes, built-in animation and extra texture maps removed, textures reduced (tools/slim_char.py):
 agb1.glb  "A rigged, animated black African male character" by Maggadog (mwangiwambui.wambui)  https://sketchfab.com/3d-models/6507aba4e704464086e3ff528e3635e2
 agb2.glb  "Gangster Dealer Musculo" by EntropyNine (entropy9ine)  https://sketchfab.com/3d-models/1eed0758ec3d45a7ae5613db8b59eb7b
+
+Vehicles you ride and police vehicles, from sketchfab.com, made game-sized by tools/slim_vehicle.mjs (baked to metres, wheels split off, thinned, colour pictures only, some hidden interiors removed). Raw downloads are in build/vehicles_src/.
+ride_gwagon.glb  "Mercedes Benz G-class W263" by Lexyc16  https://sketchfab.com/3d-models/1a2a52b16cad4e618af347461817895c  CC BY 4.0
+ride_accord.glb  "Honda Accord Euro-R '02" by Asadawut.Kaewma  https://sketchfab.com/3d-models/61f2ce941aeb405aa600f03eafe4e641  CC BY 4.0
+ride_bmw.glb  "Low Poly Car - BMW E46 1998" by roh3d  https://sketchfab.com/3d-models/d9bfd8126e754164b48ded833c017bbf  CC BY 4.0
+ride_kona.glb  "2026 Hyundai Kona Limited" by twr422  https://sketchfab.com/3d-models/000ae8ac48a24f78841b0c6053f48030  CC BY 4.0 (repainted lime)
+ride_mtb.glb  "Carbon Frame Bike" by prefrontal cortex (prefrontalcortex)  https://sketchfab.com/3d-models/398999b3360b4e6997a9aae253d6acbd  CC BY-SA 4.0 (handlebars straightened; this changed copy is shared under the same licence)
+ride_classic.glb  "Classic Bicycle | LowPoly | Game ready" by by__Rx  https://sketchfab.com/3d-models/da6507928c0c4a5c8776008cdb9f747e  CC BY 4.0
+ride_skywave.glb  "Suzuki Skywave" by sassuscus  https://sketchfab.com/3d-models/e1bcfc1ee51b4aab8417b00ab90f89fc  CC BY 4.0
+ride_electric.glb  "Electric Scooter" by Rzyas (rzyas)  https://sketchfab.com/3d-models/97ce811fbdd144c6a4f3b7912f4b1bc2  CC BY 4.0
+pol_pickup.glb  "2019 Ford Ranger Raptor POLICE (Cities Skylines)" by TSB3DMODELS  https://sketchfab.com/3d-models/47ce3eac47524efc85363cca7513751a  CC BY 4.0
+pol_suv.glb  "Lowpoly Generic SUV Police" by mk2design  https://sketchfab.com/3d-models/259fc16c23d548ba8d5802c563d8ebdc  CC BY 4.0
+pol_explorer.glb  "Calgary Police Ford Explorer" by valvetin  https://sketchfab.com/3d-models/f1318e0523cd428c87f6653dd5cded85  CC BY 4.0
+pol_van.glb  "2019 Mercedes-Benz Sprinter" by tonielpro520  https://sketchfab.com/3d-models/5788a290ddb5483fbbd5831aeef829a1  CC BY 4.0 (repainted black; POLICE lettering and light bar added in the game)
+(ride_scooter.glb, the "Vino", is kept in the folder but no longer used in the game.)
+bus_danfo.glb  "VW Bus 1971" by Batuhan13  https://sketchfab.com/3d-models/4e19f98e9e804a309ddd81e8b235ab88  CC BY 4.0 (blue paint turned yellow and black stripes added in the game, as a Lagos danfo)
+taxi_yellow.glb  "2013 Ford Crown Victoria Taxi" by zairiq-zairiq-123-pixar-cars-bfdi (zairiqzairiqpixarcarsbfdi)  https://sketchfab.com/3d-models/98d9abc290dd47178aaaf5dd579f1ce3  CC BY 4.0
