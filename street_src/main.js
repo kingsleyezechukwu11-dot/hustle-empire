@@ -16,6 +16,7 @@ import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { CONFIG } from './config.js';
 import * as logic from './logic.js';
 import carsGlb from './models/cars.glb';
+import rideScooterGlb from './models/ride_scooter.glb';
 import cop1Glb from './models/cop1.glb';
 import cop2Glb from './models/cop2.glb';
 import cop3Glb from './models/cop3.glb';
@@ -2625,6 +2626,7 @@ new GLTFLoader().parse(carsGlb.buffer.slice(carsGlb.byteOffset, carsGlb.byteOffs
     const th = (m.alongX ? -Math.PI / 2 : 0) + (m.sig.sign > 0 ? Math.PI : 0), ap = turn(1, 0, -th), al = turn(ap[0], ap[1], -m.best); // the axle (the car's own left-right line) as the wheels see it
     carKinds.push({ axleVec: new THREE.Vector3(al[0], 0, al[1]).normalize(), name: m.name, sig: m.sig, tpl, paints, half: m.len * k / 2, halfW: m.wid * k / 2, rad: m.rad * k, axle: m.alongX ? 'z' : 'x' });
   }
+  makeRideArt();
 }, (e) => console.error('cars failed to load', e));
 const carPos = (c) => (c.axis === 'z' ? [c.line * PITCH + F - c.dir * c.lane, c.s] : [c.s, c.line * PITCH + F + c.dir * c.lane]); // keep right
 function spawnCar() {
@@ -2826,7 +2828,8 @@ const endTouch = (e) => {
   if (e.pointerId === look.id) look.id = null;
 };
 canvas.addEventListener('pointerup', endTouch); canvas.addEventListener('pointercancel', endTouch);
-window.addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; keys[e.code] = 1; uiKey(e); }); // (typing a message moves nobody) window.addEventListener('keyup', (e) => { keys[e.code] = 0; });
+window.addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; keys[e.code] = 1; uiKey(e); }); /* (typing a message moves nobody) */
+window.addEventListener('keyup', (e) => { keys[e.code] = 0; });
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 /* ---------------- the journey: money, a place to live, making it a home ---------------- */
@@ -2853,7 +2856,7 @@ const game = { money: logic.freshGame(CONFIG), curV: 1, home: -1, items: [], see
 try {
   if (location.hash.includes('new')) localStorage.removeItem(SAVE_KEY); // testing: #new starts again from nothing
   const sv = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-  if (sv && typeof sv.money === 'number' && Array.isArray(sv.items)) { Object.assign(game, sv); if (sv.heroV !== 2) { game.hero = 'leo'; game.heroV = 2; } if (sv.curV !== 1) { game.money = CONFIG.startMoney; game.curV = 1; } game.money = logic.loadMoney(game.money, CONFIG); /* a broken save can never start below 0 */ } // the move to naira: everyone starts again with a million // Leo became the main character; an older save moves over to him once
+  if (sv && typeof sv.money === 'number' && Array.isArray(sv.items)) { Object.assign(game, sv); if (sv.heroV !== 2) { game.hero = 'leo'; game.heroV = 2; } if (sv.curV !== 1) { game.money = CONFIG.startMoney; game.curV = 1; } game.money = logic.loadMoney(game.money, CONFIG); /* a broken save can never start below 0 */ } /* the move to naira: an older save starts again with the new game's money (CONFIG.startMoney); Leo became the main character; an older save moves over to him once */
 } catch (e) { /* no saved game: start fresh */ }
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(game)); } catch (e) { /* not remembered, that is all */ } }
 
@@ -3509,7 +3512,16 @@ const $ = (id) => document.getElementById(id);
 const ui = { busy: false, act: null, goal: '', money: -1 }, moneyEl = $('money'), goalEl = $('goal'), actEl = $('act'), talkEl = $('talk');
 $('me').addEventListener('click', () => { if (ui.busy || !$('charlist').children.length) return; ui.busy = true; $('chars').hidden = false; }); // your own picture opens the list of characters
 $('charx').addEventListener('click', () => { $('chars').hidden = true; ui.busy = false; });
-function showMoney() { const v = game.money - (ui.hold || 0); if (ui.money === v) return; ui.money = v; moneyEl.textContent = cash(v); } // (ui.hold: money earned whose coins are still in the air)
+function showMoney() { // (ui.hold: money earned whose coins are still in the air; ui.count: money just spent, still counting down)
+  let v = Math.max(0, game.money - (ui.hold || 0)); const c = ui.count; /* the figure shown is never below 0 */
+  if (c) { const t = (performance.now() - c.t0) / c.dur; if (t >= 1) ui.count = null; else v = logic.countStep(c.from, v, t); }
+  if (ui.money === v) return; ui.money = v; moneyEl.textContent = cash(v);
+}
+function moneyCount(from, dur = 800) { // after paying: the balance runs down from what it was to what it is now
+  ui.count = { from: Math.max(0, from), t0: performance.now(), dur: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : dur };
+  moneyEl.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 420, easing: 'ease-out' });
+  const tick = () => { showMoney(); if (ui.count) setTimeout(tick, 33); }; tick(); /* (it keeps counting even while a card has the game paused) */
+}
 function setGoal(text) { if (ui.goal === text) return; ui.goal = text; goalEl.textContent = text; }
 function setAct(a) { if ((ui.act && ui.act.label) === (a && a.label)) { ui.act = a; return; } ui.act = a; actEl.hidden = !a; if (a) actEl.textContent = a.label; }
 actEl.addEventListener('click', () => { if (ui.act && !ui.busy) ui.act.run(); });
@@ -3735,12 +3747,82 @@ function makeOffer() { // an errand that fits where you are standing: a pickup n
   return { from: { ...a, px: nook[0], pz: nook[1] }, to: b, d1, d2, pay: Math.round((2500 + d2 * 22 + d1 * 8) * L.mult / 100) * 100, time: Math.round(((d1 + d2) / 2.9 * L.slack + 18) / 5) * 5 };
 }
 const errandEl = $('errand'), bendEl = $('erbend'), numText = (a) => 'No. ' + a.num;
-const MODES = { // ways to travel; all but walking have to be owned first
-  walk: { name: 'Walk', say: 'Free, and always ready. Push the stick right out to run.', tint: ['#e2fc9a', '#a5e314'] },
-  bike: { name: 'Bike', say: 'The fastest way across town. Takes the long errands.', price: 180000, tint: ['#ffd9b0', '#ff9a3a'] },
-  scooter: { name: 'Scooter', say: 'Quick and easy to park. Good for most errands.', price: 90000, tint: ['#c9ecff', '#5fb4ff'] },
-  skate: { name: 'Skateboard', say: 'Faster than walking, and it fits under your arm.', price: 25000, tint: ['#e3d8ff', '#9a7bff'] } };
-const MODE_IDS = Object.keys(MODES);
+/* ---------------- things you ride ---------------- */
+// rideModel(id) gives a new copy of the bicycle, the scooter or your car: in metres, wheels on y = 0, nose to +z. One template of
+// each is made the first time it is asked for; every copy shares its shapes and paints, so a copy costs next to nothing.
+// Named parts for the riding to come: wheelF, wheelR, seat, grips, and basket (bicycle) or box (scooter). The car has its 'wheel's.
+const RIDE_TPL = {}, RIDE_PIC = {}, RIDE_SRC = {}, RIDE_CAR_PAINT = '#b6f02c';
+const rideMat = (color, rough = 0.6, metal = 0) => (HQ ? new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal }) : new THREE.MeshLambertMaterial({ color }));
+const rideSpot = (name, x, y, z) => { const o = new THREE.Object3D(); o.name = name; o.position.set(x, y, z); return o; };
+function buildBicycle() { // made here, part by part: frame, two spoked wheels, saddle, handlebars, pedals and a basket on the front
+  const g = new THREE.Group(), up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), P = (y, z, x = 0) => new THREE.Vector3(x, y, z); g.name = 'bicycle';
+  const tube = (a, b, r, seg = 8) => { const d = b.clone().sub(a), geo = new THREE.CylinderGeometry(r, r, d.length(), seg, 1); geo.applyQuaternion(q.setFromUnitVectors(up, d.clone().normalize())); return geo.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2); };
+  const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+  const mesh = (geos, mat, name) => { const m = new THREE.Mesh(mergeGeometries(geos), mat); geos.forEach((x) => x.dispose()); m.castShadow = HQ; if (name) m.name = name; return m; };
+  const paint = rideMat('#e8492e', 0.42, 0.1), steel = rideMat('#c6cace', 0.35, 0.6), black = rideMat('#1b1d21', 0.85), wicker = rideMat('#c99b5c', 0.9);
+  const R = 0.34, AR = P(R, -0.52), AF = P(R, 0.54), BB = P(0.29, -0.06), ST = P(0.8, -0.21), HT = P(0.87, 0.365), HB = P(0.7, 0.41), SM = P(1.02, 0.325), side = (v, x) => v.clone().setX(x);
+  g.add(mesh([tube(BB, ST, 0.019), tube(ST, HT, 0.017), tube(BB, HB, 0.021), tube(HB, HT, 0.025), box(0.13, 0.03, 0.05, 0, HB.y - 0.01, HB.z + 0.005),
+    ...[-1, 1].flatMap((s) => [tube(side(AR, s * 0.06), side(BB, s * 0.03), 0.011, 6), tube(side(AR, s * 0.06), side(ST, s * 0.02), 0.009, 6), tube(side(HB, s * 0.055), side(AF, s * 0.06), 0.012, 6)])], paint));
+  const ped = [1, -1].map((s) => P(BB.y - s * 0.085, BB.z + s * 0.14, s * 0.1)); // the two pedals, one forward and down, one back and up
+  g.add(mesh([tube(ST, P(0.915, -0.243), 0.012), tube(HT, SM, 0.013), tube(P(SM.y, SM.z, -0.11), P(SM.y, SM.z, 0.11), 0.012), ...[-1, 1].map((s) => tube(P(SM.y, SM.z, s * 0.11), P(SM.y + 0.02, SM.z - 0.085, s * 0.25), 0.012)),
+    tube(side(BB, -0.1), side(BB, 0.1), 0.013), ...ped.map((p, i) => tube(side(BB, p.x), p, 0.011, 6)), new THREE.CylinderGeometry(0.085, 0.085, 0.006, 18).rotateZ(Math.PI / 2).translate(0.045, BB.y, BB.z),
+    ...[-1, 1].map((s) => tube(P(SM.y, SM.z, s * 0.09), P(SM.y - 0.03, SM.z + 0.16, s * 0.09), 0.006, 5))], steel)); // (the last two: the arms the basket hangs on)
+  g.add(mesh([new THREE.SphereGeometry(1, 12, 7).scale(0.078, 0.028, 0.135).translate(0, 0.935, -0.25), ...[-1, 1].map((s) => tube(P(SM.y + 0.02, SM.z - 0.085, s * 0.25), P(SM.y + 0.024, SM.z - 0.14, s * 0.3), 0.017)),
+    ...ped.map((p) => box(0.09, 0.022, 0.065, p.x + Math.sign(p.x) * 0.045, p.y, p.z))], black));
+  { const w = 0.36, h = 0.2, d = 0.25, t = 0.014, b = new THREE.Group(); b.name = 'basket'; b.position.set(0, SM.y - 0.2, SM.z + 0.14 + d / 2); b.userData = { w, h, d }; // the basket: 'basket' sits at the middle of its floor
+    b.add(mesh([box(w, t, d, 0, t / 2, 0), box(w, h, t, 0, h / 2, d / 2 - t / 2), box(w, h, t, 0, h / 2, -d / 2 + t / 2), box(t, h, d, w / 2 - t / 2, h / 2, 0), box(t, h, d, -w / 2 + t / 2, h / 2, 0),
+      box(w + 0.02, 0.024, 0.024, 0, h, d / 2 - t / 2), box(w + 0.02, 0.024, 0.024, 0, h, -d / 2 + t / 2), box(0.024, 0.024, d, w / 2 - t / 2, h, 0), box(0.024, 0.024, d, -w / 2 + t / 2, h, 0)], wicker)); g.add(b); }
+  const tyre = new THREE.TorusGeometry(R - 0.021, 0.021, 8, 28).rotateY(Math.PI / 2), rim = [new THREE.TorusGeometry(R - 0.05, 0.011, 6, 24).rotateY(Math.PI / 2), new THREE.CylinderGeometry(0.024, 0.024, 0.11, 8).rotateZ(Math.PI / 2)];
+  for (let i = 0; i < 8; i++) rim.push(new THREE.CylinderGeometry(0.0045, 0.0045, 2 * (R - 0.05), 3, 1, true).rotateX(i * Math.PI / 8 + 0.1));
+  const wt = mesh([tyre], black), wr = mesh(rim, steel);
+  for (const [name, at] of [['wheelR', AR], ['wheelF', AF]]) { const w = new THREE.Group(); w.name = name; w.position.copy(at); w.userData = { rad: R }; w.add(name === 'wheelR' ? wt : wt.clone(), name === 'wheelR' ? wr : wr.clone()); g.add(w); }
+  const grips = rideSpot('grips', 0, SM.y + 0.022, SM.z - 0.11); grips.userData = { half: 0.275 }; g.add(rideSpot('seat', 0, 0.963, -0.25), grips);
+  return g;
+}
+function buildScooter() { // the "Vino" scooter (models/CREDITS.txt), slimmed by tools/slim_scooter.py: body + two wheels, and a delivery box on the back
+  const src = RIDE_SRC.scooter; if (!src) return null; const g = new THREE.Group(), mats = new Map(); g.name = 'scooter';
+  const light = (m) => { if (!mats.has(m)) { const glass = /^Glass/.test(m.name); mats.set(m, HQ ? Object.assign(m, { envMapIntensity: 0.25 }) : new THREE.MeshLambertMaterial({ map: m.map, name: m.name, transparent: glass, opacity: glass ? 0.4 : 1, side: m.side })); if (HQ && m.name === 'Main_Body') shiny(m); } return mats.get(m); };
+  for (const c of [...src.children]) { c.traverse((o) => { if (o.isMesh) { o.material = light(o.material); o.castShadow = HQ; } }); if (/^wheel/.test(c.name)) c.userData = { rad: c.position.y }; g.add(c); }
+  const box = new THREE.Group(), W = 0.34, H = 0.3, D = 0.32; box.name = 'box'; box.position.set(0, 0.65, -0.65); box.userData = { w: W, h: H, d: D }; // 'box' sits at the middle of the delivery box's floor
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(W, H, D).translate(0, H / 2, 0), rideMat('#22262c', 0.6)), lid = new THREE.Mesh(new THREE.BoxGeometry(W + 0.016, 0.045, D + 0.016).translate(0, H + 0.008, 0), rideMat('#b6f02c', 0.5)),
+    rack = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.36).translate(0, -0.025, 0.04), rideMat('#2b2f35', 0.5, 0.4));
+  for (const m of [shell, lid, rack]) m.castShadow = HQ; box.add(shell, lid, rack); g.add(box);
+  const grips = rideSpot('grips', 0, 0.97, 0.3); grips.userData = { half: 0.28 }; g.add(rideSpot('seat', 0, 0.74, -0.2), grips);
+  return g;
+}
+function buildCar() { // your own car: the smallest of the cars in the traffic, in a paint nobody else has
+  if (!carKinds.length) return null; const kind = carKinds.reduce((a, b) => (b.half < a.half ? b : a)), g = kind.tpl.clone(true); g.name = 'car'; g.userData = { half: kind.half, halfW: kind.halfW, rad: kind.rad, kind: kind.name };
+  let paint = null; g.traverse((o) => { if (!o.isMesh) return; o.castShadow = o.receiveShadow = HQ;
+    if (/^body/i.test(o.material.name)) { if (!paint) { paint = Object.assign(o.material.clone(), { color: new THREE.Color(RIDE_CAR_PAINT), name: o.material.name }); if (HQ) shiny(paint); } o.material = paint; } });
+  return g;
+}
+const RIDE_BUILD = { bicycle: buildBicycle, scooter: buildScooter, car: buildCar };
+function rideModel(id) { const t = RIDE_TPL[id] || (RIDE_BUILD[id] && (RIDE_TPL[id] = RIDE_BUILD[id]())); return t ? t.clone(true) : null; }
+function rideTris(o) { let n = 0; o.traverse((m) => { if (m.isMesh) n += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; }); return Math.round(n); }
+new GLTFLoader().parse(rideScooterGlb.buffer.slice(rideScooterGlb.byteOffset, rideScooterGlb.byteOffset + rideScooterGlb.byteLength), '', (gltf) => { RIDE_SRC.scooter = gltf.scene; }, (e) => console.error('scooter failed to load', e));
+// The pictures on the travel card: each thing drawn once from its real model, by the game's own renderer into one small hidden
+// picture that is thrown away afterwards. (The scooter keeps the picture made from the full-detail model, RIDE_ART.scooter.)
+function makeRideArt() {
+  const ids = logic.rideIds(CONFIG).filter((id) => id !== 'walk' && !RIDE_PIC[id] && !RIDE_ART[id] && (id !== 'car' || carKinds.length)); if (!ids.length) return;
+  const W = 520, H = 400, keep = renderer.getRenderTarget(), col = renderer.getClearColor(new THREE.Color()), alpha = renderer.getClearAlpha(); let rt = null;
+  try {
+    rt = new THREE.WebGLRenderTarget(W, H, { samples: 4 }); const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(18, W / H, 0.1, 80), buf = new Uint8Array(W * H * 4), bx = new THREE.Box3(), ball = new THREE.Sphere();
+    sc.add(new THREE.HemisphereLight(0xffffff, 0x9a8a7a, 2.2)); const d = new THREE.DirectionalLight(0xffffff, 2.4); d.position.set(2, 3, 2.5); sc.add(d);
+    const enc = new Uint8Array(256); for (let i = 0; i < 256; i++) { const c = i / 255; enc[i] = Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)); } // the renderer hands back linear light: this is the screen's curve
+    for (const id of ids) {
+      const m = rideModel(id); if (!m) continue; sc.add(m); bx.setFromObject(m).getBoundingSphere(ball);
+      cam.position.set(0.66, 0.3, 0.69).normalize().multiplyScalar(ball.radius / Math.sin(cam.fov * Math.PI / 360) * 1.02).add(ball.center); cam.lookAt(ball.center);
+      renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(sc, cam); renderer.readRenderTargetPixels(rt, 0, 0, W, H, buf); sc.remove(m);
+      let x0 = W, x1 = -1, y0 = H, y1 = -1; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (buf[(y * W + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < x0) continue; const w = x1 - x0 + 1, h = y1 - y0 + 1, cv = document.createElement('canvas'); cv.width = w; cv.height = h; const g2 = cv.getContext('2d'), im = g2.createImageData(w, h), px = im.data;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const s = ((y1 - y) * W + x0 + x) * 4, t = (y * w + x) * 4, a = buf[s + 3]; // (the hidden picture is upside down, and its colours are already multiplied by how solid they are)
+        if (a) { const k = 255 / a; px[t] = enc[Math.min(255, Math.round(buf[s] * k))]; px[t + 1] = enc[Math.min(255, Math.round(buf[s + 1] * k))]; px[t + 2] = enc[Math.min(255, Math.round(buf[s + 2] * k))]; px[t + 3] = a; } }
+      g2.putImageData(im, 0, 0); RIDE_PIC[id] = cv.toDataURL('image/png');
+    }
+  } catch (e) { console.error('ride pictures failed', e); }
+  renderer.setRenderTarget(keep); renderer.setClearColor(col, alpha); if (rt) rt.dispose();
+}
+const RIDES = logic.rideIds(CONFIG), rideOpt = (id) => logic.rideOption(game, id, CONFIG, CUR.sym), ridePic = (id) => RIDE_PIC[id] || RIDE_ART[id] || '';
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ER_ICON = { // small line drawings on the card
   box: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 7.200v9.600L12 21l-8-4.200V7.200z M4 7.200l8 4.200 8-4.200 M12 11.400V21 M8 5.100l8 4.200" fill="none" stroke="#141a22" stroke-width="1.900" stroke-linejoin="round" stroke-linecap="round"/></svg>',
@@ -3763,53 +3845,59 @@ function walkSheet(id) { // your character walking on the spot, drawn once from 
     const cam = new THREE.PerspectiveCamera(24, WF.w / WF.h, 0.1, 20); cam.position.set(0, top * 0.56, top * 2.62); cam.lookAt(0, top * 0.53, 0);
     const cv = document.createElement('canvas'); cv.width = WF.w * WF.cols; cv.height = WF.h * Math.ceil(WF.n / WF.cols); const g = cv.getContext('2d');
     for (let i = 0; i < WF.n; i++) { mx.setTime(dur * i / WF.n); m.updateMatrixWorld(true); r.render(sc, cam); g.drawImage(r.domElement, (i % WF.cols) * WF.w, Math.floor(i / WF.cols) * WF.h); }
-    let skate = null;
-    try { // and standing on the skateboard: feet apart across the board, knees a little bent, arms out for balance
-      mx.stopAllAction(); mx.clipAction(H.k.idle).play(); mx.setTime(0.2); m.position.y += (H.k.lift || 0) - (H.k.liftWalk || 0); const yaw = -0.3; m.rotation.y = yaw; m.updateMatrixWorld(true);
-      const R = rigFor(m), side = (b) => Math.sign(b.getWorldPosition(_hw).x * Math.cos(yaw) - _hw.z * Math.sin(yaw)) || 1, y0 = R.feet[0] ? R.feet[0].getWorldPosition(_hw).y : 0;
-      const fwd = () => _ax.set(Math.sin(yaw), 0, Math.cos(yaw)), right = () => _ax.set(Math.cos(yaw), 0, -Math.sin(yaw)), sides = R.thighs.map(side), arm = R.arms.map(side);
-      R.thighs.forEach((b, i) => { fwd(); turnBone(b, 0.14 * sides[i]); right(); turnBone(b, -0.42); }); m.updateMatrixWorld(true);
-      R.shins.forEach((b, i) => { right(); turnBone(b, 0.84); }); m.updateMatrixWorld(true);
-      R.feet.forEach((b, i) => { right(); turnBone(b, -0.42); fwd(); turnBone(b, -0.14 * (sides[i] || 1)); });
-      R.arms.forEach((b, i) => { fwd(); turnBone(b, 0.34 * arm[i]); }); m.updateMatrixWorld(true);
-      if (R.feet[0]) { m.position.y -= R.feet[0].getWorldPosition(_hw).y - y0; m.updateMatrixWorld(true); }
-      const c2 = new THREE.PerspectiveCamera(24, WF.w / WF.h, 0.1, 20); c2.position.set(0, top * 0.5, top * 2.6); c2.lookAt(0, top * 0.425, 0); c2.updateMatrixWorld(true); r.render(sc, c2);
-      const fl = R.feet.map((b) => b.getWorldPosition(new THREE.Vector3())), gx = (v) => (v.clone().project(c2).x * 0.5 + 0.5) * WF.w, gy = (y) => (1 - (_hv.set(0, y, 0).project(c2).y * 0.5 + 0.5)) * WF.h;
-      const mid = fl.length === 2 ? (gx(fl[0]) + gx(fl[1])) / 2 : WF.w / 2, sole = gy(0), pxm = (gy(0) - gy(top)) / top, bw = 0.98 * pxm, bh = bw * 107 / 477;
-      skate = document.createElement('canvas'); skate.width = WF.w; skate.height = WF.h; const sg = skate.getContext('2d'), hold = document.createElement('canvas'); hold.width = WF.w; hold.height = WF.h; hold.getContext('2d').drawImage(r.domElement, 0, 0);
-      const im = new Image(); im.onload = () => { sg.clearRect(0, 0, WF.w, WF.h); sg.drawImage(im, mid - bw / 2, sole - bh * 0.3, bw, bh); sg.drawImage(hold, 0, 0); skate.dataset.ok = '1'; const to = bendEl.querySelector('canvas.sk'); if (to) { to.width = WF.w; to.height = WF.h; to.getContext('2d').drawImage(skate, 0, 0); } }; im.src = RIDE_ART.skateSide;
-    } catch (e) { skate = null; }
     mx.stopAllAction(); mx.uncacheRoot(m); r.dispose(); r.forceContextLoss();
-    return WALK_SHEET[id] = { cv, dur, skate };
+    return WALK_SHEET[id] = { cv, dur };
   } catch (e) { return null; }
 }
 function walkPlay() { // the character on the card keeps walking while the card is up
   cancelAnimationFrame(walkRaf); const cv = bendEl.querySelector('canvas.me'); if (!cv) return; const S = walkSheet(hero.who);
   cv.width = WF.w; cv.height = WF.h; const g = cv.getContext('2d'), t0 = performance.now(); let last = -1;
   if (!S) { const im = new Image(); im.onload = () => { const k = Math.min(WF.w / im.width, WF.h / im.height) * 1.5, w = im.width * k, h = im.height * k; g.drawImage(im, (WF.w - w) / 2, WF.h - h * 0.93, w, h); }; im.src = HERO_BODY[hero.who] || ''; return; } // (no walking frames could be drawn: a still picture stands in)
-  { const sk = bendEl.querySelector('canvas.sk'); if (sk && S.skate) { sk.width = WF.w; sk.height = WF.h; sk.getContext('2d').drawImage(S.skate, 0, 0); } else if (sk) sk.replaceWith(Object.assign(new Image(), { className: 'v skate', src: RIDE_ART.skate, alt: '' })); }
   const tick = () => { if (!cv.isConnected || job.state !== 'offer') return; const f = Math.floor((performance.now() - t0) / 1000 / (S.dur * 1.5) * WF.n) % WF.n; // (an easy stroll: half as slow again as the real walk)
     if (f !== last) { last = f; g.clearRect(0, 0, WF.w, WF.h); g.drawImage(S.cv, (f % WF.cols) * WF.w, Math.floor(f / WF.cols) * WF.h, WF.w, WF.h, 0, 0, WF.w, WF.h); }
     walkRaf = requestAnimationFrame(tick); }; tick();
 }
-const pickCta = (id) => id === 'walk' || (game.rides || {})[id] ? `<button class="start" type="button" data-act="start">${ER_ICON.play}<span>Start</span></button>` : `<button class="price" type="button" data-act="locked"><i class="c"></i><span>${cash(MODES[id].price)}</span>${ER_ICON.lock}</button>`;
+function pickFoot(id) { // under the tiles: one short line (Owned / what you still need / the question before buying) and the one button
+  const o = rideOpt(id), ask = job.ask === id && o.act === 'buy', line = ask ? o.confirm : o.need || o.tag;
+  const btn = ask ? `<div class="two"><button class="no" type="button" data-act="no">Not now</button><button class="start" type="button" data-act="buy"><span>Buy</span></button></div>`
+    : o.act === 'start' ? `<button class="start" type="button" data-act="start">${ER_ICON.play}<span>Start</span></button>`
+    : o.act === 'buy' ? `<button class="price" type="button" data-act="ask" aria-label="Buy for ${esc(o.price)}"><i class="c"></i><span>${esc(o.price)}</span></button>`
+    : `<button class="price off" type="button" data-act="locked" aria-disabled="true"><i class="c"></i><span>${esc(o.price)}</span>${ER_ICON.lock}</button>`;
+  return `<p class="nt${ask ? ' ask' : o.act === 'short' ? ' need' : ''}">${o.tag && !ask ? ER_ICON.check : ''}<span>${esc(line)}</span></p>${btn}`;
+}
 function errandCard() { // the four ways to travel side by side on one glossy card; the one you chose stands in the middle
-  const own = game.rides || {}, at = job.pick, id = MODE_IDS[at], last = MODE_IDS.length - 1;
+  const at = job.pick, id = RIDES[at], last = RIDES.length - 1, opts = RIDES.map(rideOpt);
   return `<div class="pick"><div class="hd"><h2>How do you want to run your errand?</h2><button class="x" type="button" data-act="skip" aria-label="Not now"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.500 3.500l9 9M12.500 3.500l-9 9" fill="none" stroke="#141a22" stroke-width="2.400" stroke-linecap="round"/></svg></button></div>
-    <div class="rail"><div class="trk" style="--at:${at}">${MODE_IDS.map((m, i) => `<span class="it${i === at ? ' on' : ''}">${m === 'walk' ? '<canvas class="me"></canvas>' : m === 'skate' ? '<canvas class="sk"></canvas>' : `<img class="v ${m}" src="${RIDE_ART[m]}" alt="">`}</span>`).join('')}</div>
+    <div class="rail"><div class="trk" style="--at:${at}">${opts.map((o, i) => `<span class="it${i === at ? ' on' : ''}${o.act === 'short' ? ' short' : ''}">${o.id === 'walk' ? '<canvas class="me"></canvas>' : `<img class="v ${o.id}" src="${ridePic(o.id)}" alt="">`}</span>`).join('')}</div>
       <button class="nav l" type="button" data-act="step" data-d="-1" aria-label="Back"${at ? '' : ' disabled'}>${CHEV}</button><button class="nav r" type="button" data-act="step" data-d="1" aria-label="Next"${at < last ? '' : ' disabled'}>${CHEV}</button></div>
-    <h3 id="pkname">${MODES[id].name}</h3>
-    <div class="opts">${MODE_IDS.map((m, i) => { const mine = m === 'walk' || !!own[m]; return `<button type="button" class="op${i === at ? ' on' : ''}${mine ? '' : ' lock'}" data-act="mode" data-i="${i}" aria-label="${MODES[m].name}" aria-pressed="${i === at}"><img class="${m === 'walk' ? 'me' : m}" src="${m === 'walk' ? HERO_BUST[hero.who] || HERO_FACE[hero.who] || '' : RIDE_ART[m]}" alt="">${mine ? '' : `<span class="lk">${ER_ICON.lock}</span>`}</button>`; }).join('')}</div>
-    <div id="pkcta">${pickCta(id)}</div></div>`;
+    <h3 id="pkname">${esc(opts[at].name)}</h3>
+    <div class="opts">${opts.map((o, i) => `<button type="button" class="op${i === at ? ' on' : ''}${o.owned ? '' : ' lock'}${o.act === 'short' ? ' short' : ''}" data-act="mode" data-i="${i}" aria-label="${esc(o.name + (o.tag ? ', owned' : o.need ? ', ' + o.need : o.price ? ', ' + o.price : ''))}" aria-pressed="${i === at}"><img class="${o.id === 'walk' ? 'me' : o.id}" src="${o.id === 'walk' ? HERO_BUST[hero.who] || HERO_FACE[hero.who] || '' : ridePic(o.id)}" alt="">${o.owned ? (o.tag ? `<span class="lk">${ER_ICON.check}</span>` : '') : `<span class="lk">${ER_ICON.lock}</span>`}</button>`).join('')}</div>
+    <div id="pkcta">${pickFoot(id)}</div></div>`;
 }
 function pickStep(d) { // slide to the next one: nothing is rebuilt, so it glides
-  const n = clamp(job.pick + d, 0, MODE_IDS.length - 1); if (n === job.pick) return; job.pick = n; const id = MODE_IDS[n]; if (id === 'walk' || (game.rides || {})[id]) game.ride = id;
+  const n = clamp(job.pick + d, 0, RIDES.length - 1); if (n === job.pick) return; job.pick = n; job.ask = null; const id = RIDES[n];
   const trk = bendEl.querySelector('.trk'); if (!trk) { bendEl.innerHTML = errandCard(); walkPlay(); return; }
   trk.style.setProperty('--at', n); [...trk.children].forEach((c, i) => c.classList.toggle('on', i === n));
   [...bendEl.querySelectorAll('.op')].forEach((c, i) => { c.classList.toggle('on', i === n); c.setAttribute('aria-pressed', String(i === n)); });
-  bendEl.querySelector('.nav.l').disabled = n === 0; bendEl.querySelector('.nav.r').disabled = n === MODE_IDS.length - 1;
-  const h = $('pkname'); h.textContent = MODES[id].name; h.classList.remove('sw'); void h.offsetWidth; h.classList.add('sw'); $('pkcta').innerHTML = pickCta(id);
+  bendEl.querySelector('.nav.l').disabled = n === 0; bendEl.querySelector('.nav.r').disabled = n === RIDES.length - 1;
+  const h = $('pkname'); h.textContent = CONFIG.transport[id].name; h.classList.remove('sw'); void h.offsetWidth; h.classList.add('sw'); $('pkcta').innerHTML = pickFoot(id);
   chime([740], 'triangle', 0.04, 0.05, 0.03);
+}
+function pickAsk(id) { // the price was tapped: ask before any money moves
+  if (rideOpt(id).act !== 'buy') return; job.ask = id; job.askAt = performance.now(); $('pkcta').innerHTML = pickFoot(id); chime([660, 880], 'triangle', 0.05, 0.08, 0.04);
+}
+function pickBuy(id) { // "Buy" was tapped: pay once, and it is yours for good
+  if (job.ask !== id || performance.now() - job.askAt < 350) return; /* (the second half of a double tap on the price is not a yes) */
+  job.ask = null; const was = game.money, took = logic.buyRide(game, id, CONFIG);
+  if (took.ok) { game.money = took.money; game.rides = took.rides; save(); moneyCount(was - (ui.hold || 0)); gain(-(was - took.money), CONFIG.transport[id].name); chime([784, 1047, 1319, 1568], 'triangle', 0.07, 0.16, 0.07); }
+  else chime([300, 240], 'triangle', 0.08, 0.1, 0.05);
+  bendEl.innerHTML = errandCard(); walkPlay(); /* it now shows as yours, with Start (or, had the money gone meanwhile, as it really is) */
+}
+function pickStart(id) { // set off by the one you chose: only by something you own
+  if (job.state !== 'offer' || rideOpt(id).act !== 'start') return; game.ride = id; save(); startErrand();
+}
+function openPicker() { // page two of an errand: how to travel
+  if (job.state !== 'offer') return; job.pick = logic.ridePick(game, CONFIG); job.ask = null; ui.busy = true; makeRideArt(); errandEl.hidden = false; bendErrand();
 }
 function bendErrand() { // lay the card out: flat, frosted, sitting just above the bar of people at the foot of the screen
   const W = window.innerWidth, w = Math.min(W - 16, W < 760 ? 420 : 520), dock = $('dock').getBoundingClientRect();
@@ -3825,7 +3913,7 @@ function showBrief() { // your own character, speaking: what the errand is
   if (!game.name) { briefFull = ''; briefAt = 0; clearInterval(briefTimer); $('brtext').textContent = 'Hi! What should I call you?'; $('brform').hidden = false; briefEl.classList.remove('done'); briefEl.classList.add('ask'); briefEl.hidden = false; setTimeout(() => $('brin').focus(), 350); return; }
   $('brform').hidden = true; briefEl.classList.remove('ask');
   briefFull = (game.jobs ? 'New errand! ' : 'My first errand! ') + 'Pick up a parcel at ' + numText(o.from).replace(' ', '') + ' and deliver it to ' + numText(o.to).replace(' ', '') + '. It pays ' + cash(o.pay) + ' and we have ' + clockText(o.time) + '. Let’s be quick!';
-  briefGo = () => { game.ride = 'walk'; startErrand(); }; briefNo = null; $('brno').hidden = true; $('brgo').textContent = 'Start'; briefEl.classList.remove('plain', 'other'); speak();
+  briefGo = openPicker; briefNo = null; $('brno').hidden = true; $('brgo').textContent = 'Next'; briefEl.classList.remove('plain', 'other'); speak();
 }
 function speak() { // the words come out as if spoken
   briefAt = 0; $('brtext').textContent = ''; briefEl.classList.remove('done'); briefEl.hidden = false; clearInterval(briefTimer);
@@ -3842,7 +3930,7 @@ function tell(text, btn, go, opt = {}) { // somebody tells you something: your o
 
 function nextBrief() { // a tap finishes the sentence; the next tap turns the page
   if (briefAt < briefFull.length) { clearInterval(briefTimer); briefAt = briefFull.length; $('brtext').textContent = briefFull; briefEl.classList.add('done'); return; }
-  briefEl.hidden = true; if (briefGo) briefGo(); // (the page for choosing a bike, scooter or skateboard is put away for now: you set off on foot)
+  briefEl.hidden = true; if (briefGo) briefGo(); /* (after an errand's first page this opens the page for choosing how to travel) */
 }
 briefEl.addEventListener('click', (e) => { if (!$('brform').hidden) return; if (briefNo && e.target.closest('#brno')) { clearInterval(briefTimer); briefEl.hidden = true; const f = briefNo; briefNo = null; f(); return; } nextBrief(); });
 $('brform').addEventListener('submit', (e) => { e.preventDefault(); const v = $('brin').value.trim().replace(/\s+/g, ' ').slice(0, 14); if (!v) { $('brin').focus(); return; } game.name = v; save(); $('brin').blur(); showBrief(); });
@@ -3857,7 +3945,8 @@ function closeErrand() { errandEl.hidden = true; briefEl.hidden = true; clearInt
 const startErrand = () => { errandEl.hidden = true; job.state = 'count'; job.count = 3.999; ui.busy = true; countShow(3); };
 errandEl.addEventListener('click', (e) => { if (errandEl.dataset.swiped) return; // (a swipe is not a tap)
   const b = e.target.closest('[data-act]'); if (!b) { if (e.target === errandEl) closeErrand(); return; } // a tap on the empty background puts it away, like the menu
-  if (b.dataset.act === 'skip') closeErrand(); else if (b.dataset.act === 'start') { game.ride = MODE_IDS[job.pick]; startErrand(); }
+  const id = RIDES[job.pick]; if (b.dataset.act === 'skip') closeErrand(); else if (b.dataset.act === 'start') pickStart(id);
+  else if (b.dataset.act === 'ask') pickAsk(id); else if (b.dataset.act === 'buy') pickBuy(id); else if (b.dataset.act === 'no') { job.ask = null; $('pkcta').innerHTML = pickFoot(id); }
   else if (b.dataset.act === 'mode') pickStep(+b.dataset.i - job.pick);
   else if (b.dataset.act === 'step') pickStep(+b.dataset.d);
   else if (b.dataset.act === 'locked') { chime([300, 240], 'triangle', 0.08, 0.1, 0.05); b.animate([{ translate: '0 0' }, { translate: '-6px 0' }, { translate: '6px 0' }, { translate: '0 0' }], { duration: 260 }); }
@@ -3866,7 +3955,8 @@ errandEl.addEventListener('click', (e) => { if (errandEl.dataset.swiped) return;
 window.addEventListener('keydown', (e) => { // on a keyboard: Enter starts it, Escape puts it away, and so does setting off walking
   if ((errandEl.hidden && briefEl.hidden) || e.repeat || (e.target && e.target.tagName === 'INPUT')) return;
   if (!errandEl.hidden && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) { pickStep(e.code === 'ArrowLeft' ? -1 : 1); return; }
-  if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') { e.preventDefault(); if (!briefEl.hidden) nextBrief(); else startErrand(); }
+  if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') { e.preventDefault(); if (!briefEl.hidden) nextBrief(); else { const id = RIDES[job.pick], act = rideOpt(id).act; if (act === 'start') pickStart(id); else if (act === 'buy' && job.ask !== id) pickAsk(id); } } /* (Enter never buys: Buy has to be tapped) */
+  else if (!errandEl.hidden && e.code === 'Escape' && job.ask) { job.ask = null; $('pkcta').innerHTML = pickFoot(RIDES[job.pick]); }
   else if (!briefEl.classList.contains('other') && (e.code === 'Escape' || (/^(Key[WASD]|Arrow(Up|Down))$/.test(e.code) && $('brform').hidden))) closeErrand();
 });
 // The sheet stands over your head: its foot comes down just past the top of the head, and the head shows in front of it.
@@ -3956,11 +4046,11 @@ function hzSpawn() {
   if (!c.length) return; c.sort((p, q) => p[0] - q[0]); const a = c[Math.floor(Math.random() * Math.min(3, c.length))][1]; hzMake(type, a.x, a.z);
 }
 function hzSay(h) {
-  const fee = Math.min(h.fee, Math.max(0, game.money)), away = () => { h.state = 'back'; ui.busy = false; hero.free = 6; },
-    pay = () => { const took = logic.spendUpTo(game.money, fee); game.money = took.money; gain(-took.paid, h.type === 'agbero' ? 'Agbero' : 'Police'); chime([392, 330], 'triangle', 0.1, 0.16, 0.07); save(); showMoney(); away(); };
+  const fee = logic.spendUpTo(game.money, h.fee).paid, ask = cash(fee || h.fee), btn = fee > 0 ? 'Pay ' + cash(fee) : 'I have nothing', away = () => { h.state = 'back'; ui.busy = false; hero.free = 6; },
+    pay = () => { const took = logic.spendUpTo(game.money, fee); game.money = took.money; if (took.paid > 0) gain(-took.paid, h.type === 'agbero' ? 'Agbero' : 'Police'); /* nothing taken: nothing to show */ chime([392, 330], 'triangle', 0.1, 0.16, 0.07); save(); showMoney(); away(); };
   h.state = 'talk';
-  if (h.type === 'agbero') tell('Oga! Nobody passes here free. Drop ' + cash(fee) + ' for the boys.', 'Pay ' + cash(fee), pay, { face: h.k.face, name: 'Agbero' });
-  else tell('Stop there! Where are you rushing to? Give me ' + cash(fee) + ' and you can go.', 'Pay ' + cash(fee), pay, { face: h.k.face, name: 'Officer', noBtn: 'Wait', no: () => { ui.busy = false; h.state = 'hold'; h.t = 0; hero.free = 16; spend('The officer is checking you…', 9, () => { note('He lets you go.', 2.5); h.state = 'back'; }); } });
+  if (h.type === 'agbero') tell('Oga! Nobody passes here free. Drop ' + ask + ' for the boys.', btn, pay, { face: h.k.face, name: 'Agbero' });
+  else tell('Stop there! Where are you rushing to? Give me ' + ask + ' and you can go.', btn, pay, { face: h.k.face, name: 'Officer', noBtn: 'Wait', no: () => { ui.busy = false; h.state = 'hold'; h.t = 0; hero.free = 16; spend('The officer is checking you…', 9, () => { note('He lets you go.', 2.5); h.state = 'back'; }); } });
 }
 function hzTick(dt) {
   const on = job.state === 'pickup' || job.state === 'deliver', now = performance.now(); if (hero.free > 0) hero.free -= dt;
@@ -4008,7 +4098,7 @@ function downTick(dt) {
     tell('Ouch! A car knocked me down. ' + (hero.lost ? 'I lost the parcel, so Level ' + L + ' starts again. ' : '') + 'I’m hurt. Tap the hospital in the menu to treat me.', 'OK'); }
 }
 function treat() { // from the hospital in the menu: pay, and you are well again
-  const took = logic.spendUpTo(game.money, CONFIG.treatFee), fee = took.paid; game.money = took.money; game.hurt = false; gain(-fee, 'Treated'); chime([523, 659, 784, 1047], 'triangle', 0.09, 0.2, 0.08); save(); $('hurt').hidden = !game.hurt; showMoney();
+  const took = logic.spendUpTo(game.money, CONFIG.treatFee), fee = took.paid; game.money = took.money; game.hurt = false; if (fee > 0) gain(-fee, 'Treated'); chime([523, 659, 784, 1047], 'triangle', 0.09, 0.2, 0.08); save(); $('hurt').hidden = !game.hurt; showMoney();
   job.nextAt = performance.now() + 3500;
 }
 function aim(name, x, z) { ui.dest = { name, x, z, errand: true }; mapT = 0; }
@@ -4317,5 +4407,5 @@ function frame() {
   errandOverHead();
 }
 function loop() { frame(); requestAnimationFrame(loop); }
-if (location.hash.includes('dbg')) window.__dbg = { logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, step: (dt) => updatePeople(dt, camera.position), look: (y) => { camYaw = y; hero.heading = y; } }; // testing only
+if (location.hash.includes('dbg')) window.__dbg = { logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, rideModel, rideTris, makeRideArt, RIDE_PIC, RIDE_TPL, openPicker, pickAsk, pickBuy, pickStart, moneyCount, save, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, step: (dt) => updatePeople(dt, camera.position), look: (y) => { camYaw = y; hero.heading = y; } }; // testing only
 requestAnimationFrame(loop);

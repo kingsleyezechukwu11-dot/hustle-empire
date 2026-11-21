@@ -46,6 +46,38 @@ export function buyRide(state, id, CONFIG) {
   return { ok: true, reason: null, shortfall: 0, money: s.money, rides };
 }
 
+// How money is written: ₦12,000 (whole naira, commas every three digits).
+export function moneyText(n, sym) {
+  const v = Math.round(Math.abs(num(n)));
+  return (num(n) < 0 ? '−' : '') + (typeof sym === 'string' ? sym : '₦') + String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// The ids of everything you can travel by, in the order the picker shows them.
+export function rideIds(CONFIG) { return CONFIG && CONFIG.transport ? Object.keys(CONFIG.transport) : []; }
+
+// What the picker shows for one way to travel:
+//   act   'start' (owned: the lime Start button) | 'buy' (the dark price pill, a tap buys) | 'short' (greyed out, nothing can be done)
+//   price the price as text ('' when it is free); tag 'Owned' or ''; need 'Need ₦12,000 more' or ''.
+export function rideOption(state, id, CONFIG, sym) {
+  const ride = rideOf(id, CONFIG), st = rideStatus(state, id, CONFIG);
+  if (!ride) return { id, name: '', act: 'short', owned: false, price: '', tag: '', need: '', confirm: '' };
+  const act = st.owned ? 'start' : st.affordable ? 'buy' : 'short';
+  return { id, name: ride.name, act, owned: st.owned, price: st.price > 0 ? moneyText(st.price, sym) : '', tag: st.owned && st.price > 0 ? 'Owned' : '',
+    need: act === 'short' ? 'Need ' + moneyText(st.shortfall, sym) + ' more' : '', confirm: act === 'buy' ? 'Buy the ' + ride.name + ' for ' + moneyText(st.price, sym) + '?' : '' };
+}
+
+// Which option the picker opens on: the one you last used if you still own it, else walking.
+export function ridePick(state, CONFIG) {
+  const ids = rideIds(CONFIG), want = state && state.ride, at = ids.indexOf(want);
+  return at >= 0 && rideStatus(state, want, CONFIG).owned ? at : Math.max(0, ids.indexOf('walk'));
+}
+
+// One step of the balance counting from one figure to another: t runs 0 to 1, eased, whole naira, never below 0.
+export function countStep(from, to, t) {
+  const k = t >= 1 ? 1 : t <= 0 ? 0 : 1 - Math.pow(1 - t, 3);
+  return Math.max(0, Math.round(bal(from) + (bal(to) - bal(from)) * k));
+}
+
 /* ---------------- starting and loading ---------------- */
 export function freshGame(CONFIG) { return CONFIG.startMoney; }
 

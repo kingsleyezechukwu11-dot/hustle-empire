@@ -18,9 +18,9 @@ PM log. Statuses: todo / building / in review / passed / QA / done.
 | Task | Status | Notes |
 |---|---|---|
 | 1.1 Config + logic modules, test runner, safe money functions, N100,000 start | passed | Reviewer PASS, 48 unit tests. Follow-ups folded into 1.2: stuck keyboard keys (old bug), balance display clamp, zero-fee wording. |
-| 1.2 Transport picker: buy once, owned, greyed with shortfall, confirmation, counter animates down | todo | |
+| 1.2 Transport picker: buy once, owned, greyed with shortfall, confirmation, counter animates down | passed | Reviewer PASS, 69 unit tests. Scooter = owner's Vino model slimmed to 309 KB. Minor defects carried into 1.3: Start appears under the finger right after Buy; small-phone overlap with the minimap; scooter picture lacks its box; car paint reads green not lime. |
 | 1.3 Riding: vehicle appears beside you, mount / dismount, speeds, where each may go | todo | |
-| 1.4 Pay range N3,000 to N15,000 by distance and package | todo | |
+| 1.4 Pay range N3,000 to N15,000 by distance and package | todo | built together with 1.3 |
 
 ## Phase 2: carrying
 todo
@@ -32,4 +32,4 @@ todo
 todo
 
 ## Open bugs
-none yet
+- The online build needs a phone copy of `ride_scooter.glb` (`tools/shrink_glb.py`, needs Pillow) and Node.js: cannot be run on this Mac yet.

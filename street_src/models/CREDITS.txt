@@ -131,6 +131,7 @@ Menu symbols (street_src/glyphs.js): Phosphor Icons, fill weight, MIT licence - 
 s_patio.glb  "Patio Set" (Sketchfab), CC BY 4.0 - packed for the game
 
 ride-art.js (pictures for the errand card) and build/vehicles_src/: "Vino" scooter by minghauLoh (https://sketchfab.com/3d-models/vino-2205f4e69bc64df3aab03c71ab9d7492) and "Motorcycle - Custom Bike JAWA (LOW-POLY)" by kreems (https://sketchfab.com/3d-models/motorcycle-custom-bike-jawa-low-poly-13771fe558604aedae09b5157029e790), both CC BY 4.0.
+ride_scooter.glb  "Vino" by minghauLoh (https://sketchfab.com/3d-models/vino-2205f4e69bc64df3aab03c71ab9d7492), CC BY 4.0 - simplified for the game (tools/slim_scooter.py: 96k triangles to 12k, colour pictures only at 256 px, wheels split off so they can turn)
 "Skateboard" by Jamoues (https://sketchfab.com/3d-models/skateboard-0f7b8ea366654674b217a743959798e7), CC BY 4.0 - picture in ride-art.js, model in build/vehicles_src/.
 
 Agberos (street touts), CC-BY 4.0, from sketchfab.com; face shapes, built-in animation and extra texture maps removed, textures reduced (tools/slim_char.py):
