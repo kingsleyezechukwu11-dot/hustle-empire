@@ -206,7 +206,7 @@
   @media (max-width:760px){#brief .bx{padding:26px 16px 28px 118px;min-height:124px}#brief .pc{width:122px;height:206px}#brname{left:110px;font-size:16px;height:32px;top:-16px}#brtext{font-size:15.5px}}
   @media (prefers-reduced-motion:reduce){#brief,#brief .bx,#brief .pc img,#brief.done .nx{animation:none}}
   /* page two: how you will travel - a row of cards you slide through, the one in the middle large, its picture standing up out of it */
-  .pick{position:relative;box-sizing:border-box;width:var(--w);padding:18px 16px 16px;color:#141a22;text-align:left;--sh:270px;background:linear-gradient(155deg,rgba(255,255,255,.7) 0%,rgba(255,255,255,.34) 42%,rgba(255,255,255,.26) 62%,rgba(255,255,255,.52) 100%);box-shadow:inset 0 2px 0 #fff,inset 0 0 0 1.5px rgba(255,255,255,.75),inset 0 -22px 40px rgba(255,255,255,.22);border-radius:26px}
+  .pick{position:relative;box-sizing:border-box;width:var(--w);padding:18px 16px 16px;color:#141a22;text-align:left;--sh:244px;background:linear-gradient(155deg,rgba(255,255,255,.7) 0%,rgba(255,255,255,.34) 42%,rgba(255,255,255,.26) 62%,rgba(255,255,255,.52) 100%);box-shadow:inset 0 2px 0 #fff,inset 0 0 0 1.5px rgba(255,255,255,.75),inset 0 -22px 40px rgba(255,255,255,.22);border-radius:26px}
   .pick::before{content:"";position:absolute;left:0;right:0;top:0;height:44%;border-radius:26px 26px 50% 50%/26px 26px 36px 36px;background:linear-gradient(180deg,rgba(255,255,255,.6),rgba(255,255,255,.08) 70%,rgba(255,255,255,0));pointer-events:none}
   .pick>*{position:relative}
   .pick .hd{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:2px 2px 0}.pick h2{margin:0;font-size:23px;line-height:1.14;font-weight:800;letter-spacing:-.025em;color:#141a22;text-wrap:balance}
@@ -219,7 +219,7 @@
   .pick .it{position:relative;flex:none;width:100%;height:100%;opacity:0;scale:.78;transition:opacity .4s ease,scale .55s cubic-bezier(.3,.85,.2,1);pointer-events:none}
   .pick .it.on{opacity:1;scale:1}
   .pick .it img,.pick .it canvas{position:absolute;left:50%;transform:translateX(-50%);max-width:none;filter:drop-shadow(0 14px 12px rgba(20,30,50,.3))}
-  .pick .it canvas.me{height:calc(var(--sh) - 8px);bottom:12px}.pick .it img.scooter{height:calc(var(--sh) * .78);bottom:20px}.pick .it img.bicycle{height:calc(var(--sh) * .76);bottom:20px}.pick .it img.car{height:calc(var(--sh) * .6);bottom:26px}.pick .it img.bicycle,.pick .it img.car{max-width:calc(100% - 96px);object-fit:contain;object-position:50% 100%}
+  .pick .it canvas.me{height:calc(var(--sh) - 8px);bottom:12px}.pick .it img.scooter{height:calc(var(--sh) * .8);bottom:18px}.pick .it img.bicycle{height:calc(var(--sh) * .76);bottom:20px}.pick .it img.car{height:calc(var(--sh) * .6);bottom:26px}.pick .it img.scooter,.pick .it img.bicycle,.pick .it img.car{max-width:calc(100% - 96px);object-fit:contain;object-position:50% 100%}
   .pick .it.short img{filter:grayscale(1) opacity(.42)}
   .pick .nav{position:absolute;top:50%;z-index:3;width:42px;height:42px;margin-top:-21px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.82);box-shadow:inset 0 0 0 1px #fff,0 6px 14px rgba(20,30,50,.16);display:grid;place-items:center;cursor:pointer;touch-action:manipulation;transition:opacity .25s ease,transform .15s ease}
   .pick .nav:active{transform:scale(.92)}
@@ -238,11 +238,13 @@
   .pick .price svg{width:22px;height:22px;flex:none;margin-left:2px}.pick .price svg circle{fill:rgba(255,255,255,.16)}
   .pick .price.off{background:rgba(20,26,34,.3);color:rgba(255,255,255,.92);box-shadow:none;cursor:default}.pick .price.off .c{filter:grayscale(1);opacity:.7}
   .pick .nt{display:flex;align-items:center;justify-content:center;gap:6px;min-height:22px;margin:-4px 0 10px;font:800 15px/1.2 -apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:-.01em;color:#141a22;text-align:center}.pick .nt svg{width:18px;height:18px;flex:none}.pick .nt.ask{font-size:17px}
+  .pick .terms{display:flex;justify-content:center;gap:7px;min-height:30px;margin:-4px 0 12px}.pick .terms span{display:flex;align-items:center;gap:5px;height:30px;padding:0 11px;border-radius:999px;background:rgba(255,255,255,.72);box-shadow:inset 0 0 0 1px rgba(255,255,255,.9);font:800 14px/1 -apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:-.01em;color:#141a22;font-variant-numeric:tabular-nums;white-space:nowrap}.pick .terms svg{width:16px;height:16px;flex:none;display:block}.pick .terms b{font-weight:800}
   .pick .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pick .two .start{padding:0 12px}.pick .no{height:60px;padding:0 12px;border:0;border-radius:999px;font:800 19px/1 -apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:-.01em;color:#141a22;background:rgba(255,255,255,.78);box-shadow:inset 0 0 0 1px #fff;cursor:pointer;touch-action:manipulation}
   .pick .price .c{width:24px;height:24px;border-radius:50%;flex:none;background:radial-gradient(circle at 34% 30%,#fff6c2 0 12%,#ffd84a 30%,#f5b21a 68%,#c98408 100%);box-shadow:inset 0 0 0 2px #e9a514,inset 0 0 0 3.5px rgba(255,240,170,.75)}
   @media (min-width:760px){.pick{--sh:340px;padding:22px 20px 20px}.pick .rail{margin:0 -20px}.pick h3{font-size:36px}.pick h2{font-size:27px}.pick .op{height:80px}}
-  @media (max-height:740px){.pick{--sh:190px}.pick h2{font-size:20px}.pick h3{font-size:26px;margin-bottom:8px}.pick .op{height:56px}.pick .start,.pick .price,.pick .no{height:54px}.pick .nt{margin-bottom:8px}}
-  @media (max-height:600px){.pick{--sh:120px}.pick h2{font-size:17px}.pick h3{font-size:22px}}
+  @media (max-height:740px){.pick{--sh:150px;padding-top:14px;padding-bottom:12px}.pick h2{font-size:20px}.pick h3{font-size:26px;margin-bottom:8px}.pick .op{height:54px}.pick .opts{margin-bottom:10px}.pick .start,.pick .price,.pick .no{height:52px}.pick .nt{margin-bottom:8px}.pick .terms{margin-bottom:8px;min-height:28px}.pick .terms span{height:28px;font-size:13px}}
+  @media (max-height:680px){.pick{--sh:112px}.pick h2{font-size:18px}.pick h3{font-size:24px;margin-bottom:6px}}
+  @media (max-height:600px){.pick{--sh:80px}.pick h2{font-size:17px}.pick h3{font-size:22px}}
   @media (prefers-reduced-motion:reduce){.pick .trk,.pick .it{transition:none}.pick h3.sw{animation:none}}
   .ercard{box-sizing:border-box;width:var(--w);padding:0 16px 0;color:#141a22;position:relative;
     background:linear-gradient(180deg,rgba(255,255,255,.5) 0%,rgba(255,255,255,.2) 40%,rgba(255,255,255,.12) 100%);box-shadow:inset 0 -1px 0 rgba(255,255,255,.4)}

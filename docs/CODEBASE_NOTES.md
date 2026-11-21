@@ -106,3 +106,23 @@ Written by the PM before the errands / transport / chase build (2026-11-20). Rea
 - Never put a `//` comment in the middle of a long line (it swallows the rest): use `/* */`.
 - After replacing CSS, grep for duplicate older rules. Do not name classes `.tab` / `.tabs`.
 - Phones have little memory: reuse objects, dispose what you remove, add no heavy models.
+
+## 9. Riding and delivery pay (tasks 1.3 + 1.4)
+- Numbers: `config.js` (`walkSpeed`, `transport.*` accel / brake / turnRate / pivot / reverse / trip / pace / cam, `ride`, `packages`,
+  `payRule`, `time`, `levels`). Rules: `logic.js` (`footSpeed`, `rideSpeed`, `rideTurn`, `mayGo`, `rideStep`, `levelRules`, `tripBands`,
+  `packagesFor`, `pickPackage`, `offerTerms`). Tests: `street_src/tests/riding.test.js`.
+- main.js, section "riding" (just above `showMap`): the `ride` state object (`st`: off / parked / walk / mount / riding / dismount),
+  `zoneAt(x, z)`, `rideFits` / `rideBad` (the four probe points), `rideObj(id)` (ONE object per vehicle, own paints so it can fade),
+  `kerbSpot` / `besideSpot` / `rideSide` (where it stands, where you step on and off), `rideCall` (from `startErrand`), `rideEnd` (from
+  `endErrand`), `rideMove` (getting on / off), `rideDrive` (the driving), `ridePlace` (wheels, cranks, lean, fade), `ridePose` (seated pose
+  by two-bone reach on any rig), `rideCarry` (parcel in basket / box), `rideAct` (Get off / Ride button), `roadBlocks` (what traffic brakes for).
+- `frame()` chooses between walking, `rideMove` and `rideDrive`; `carHit` is ignored inside the car; the countdown waits at "1" until seated.
+- Errand offers: `makeOffers()` builds one offer per ride (`job.offers`), the picker shows the selected one's package / pay / time
+  (`pickTerms`), and `pickStart` makes that one `job.offer`. The speech box no longer names addresses or pay (they depend on the ride).
+- Testing: `__dbg.quickRun('scooter')`, `__dbg.ride`, `zoneAt`, `rideOn`, `rideOff`, `rideEnd`, `kerbSpot`, `cam(yaw)`, `becomeHero(id)`.
+- After the second review: distances on offers are by the streets (`logic.routeFrom` with `STREETS`; scooter/car may not cut through inner
+  streets); a stick behind you is a U-turn (`logic.rideAim`, `ride.uturn` picks the side with room), and it backs up only when its nose is
+  blocked (`ride.back`, CONFIG.ride.backTime / backDist); `rideBad` probes middle, ends, flanks and four corners (`RIDE_PROBES`) and every
+  move must be clean; `ride.v` follows the real movement; `ride.far` + `rideLead()` lead the map, pin and a note to a ride parked out of
+  reach, and that walk is on the clock (`offer.walk`); `job.stops` caps the old stops at CONFIG.stops.perLeg; `stancePace()` measures the
+  run clip's real pace per character so the sprint is a jog without sliding feet.

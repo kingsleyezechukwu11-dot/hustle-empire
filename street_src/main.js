@@ -2259,10 +2259,20 @@ function becomeHero(id) {
   hero.obj.clear();
   const k = H.k, look = k.makeLook(H.look), m = SkeletonUtils.clone(k.root);
   m.traverse((o) => { if (o.isMesh) { o.material = look.get(o.material) || o.material; o.boundingSphere = o.boundingSphere && o.boundingSphere.clone(); o.frustumCulled = false; } });
-  hero.baseY = m.position.y; m.scale.multiplyScalar(k.scale * 1.01); m.position.y += k.lift; hero.obj.add(m); addShadow(m, hero.obj); m.traverse((o) => { if (o.isMesh) o.layers.enable(1); }); hero.mixer = new THREE.AnimationMixer(m); hero.model = m; hero.who = HEROES[id] ? id : (HEROES.leo ? 'leo' : 'nathan');
+  hero.baseY = m.position.y; hero.baseX = m.position.x; hero.baseZ = m.position.z; m.scale.multiplyScalar(k.scale * 1.01); m.position.y += k.lift; hero.obj.add(m); addShadow(m, hero.obj); m.traverse((o) => { if (o.isMesh) o.layers.enable(1); }); hero.mixer = new THREE.AnimationMixer(m); hero.model = m; hero.who = HEROES[id] ? id : (HEROES.leo ? 'leo' : 'nathan');
   hero.w = [1, 0, 0]; hero.acts = [k.idle, k.walk, H.run].map((c, n) => { const a = hero.mixer.clipAction(c); a.play(); a.setEffectiveWeight(n ? 0 : 1); return a; });
   hero.stride = k.stride; hero.lifts = [k.idle, k.walk, H.run].map((c) => standHeight(k.root, k.scale * 1.01, c));
   if (hero.who === 'nathan') wearBackpack();
+  hero.runPace = stancePace();
+}
+function stancePace() { // how fast the running animation really covers the ground at its own speed: the speed of a foot while it is planted. (0 when it cannot be told.)
+  try { const R = rigFor(hero.model), act = hero.acts[2], dur = act.getClip().duration, N = 48, feet = R.feet.slice(0, 2), pts = feet.map(() => []); if (!feet.length || !(dur > 0)) return 0;
+    hero.acts.forEach((a, i) => a.setEffectiveWeight(i === 2 ? 1 : 0)); hero.obj.updateMatrixWorld(true);
+    for (let i = 0; i <= N; i++) { act.time = Math.min(dur * i / N, dur - 1e-4); hero.mixer.update(0); hero.model.updateMatrixWorld(true); feet.forEach((f, n) => { f.getWorldPosition(_v); hero.obj.worldToLocal(_v); pts[n].push([_v.z, _v.y]); }); }
+    let sum = 0, cnt = 0; for (const p of pts) { const lo = Math.min(...p.map((q) => q[1])); for (let i = 0; i < N; i++) if (p[i][1] < lo + 0.03 && p[i + 1][1] < lo + 0.03) { sum += (p[i][0] - p[i + 1][0]) / (dur / N); cnt++; } }
+    hero.acts.forEach((a, i) => a.setEffectiveWeight(hero.w[i])); act.time = 0; hero.mixer.update(0);
+    const v = cnt ? sum / cnt : 0; return v > 1.5 && v < 9 ? v : 0;
+  } catch (e) { return 0; }
 }
 Promise.all([mixamoAnimsGlb, cop1Glb, bizmanGlb, claudiaGlb, nathanGlb, ericGlb, sophiaGlb, carlaGlb, mikeGlb, zoeGlb, roxyGlb, mayaGlb, leoGlb, cop2Glb, cop3Glb, agb1Glb, agb2Glb].map(parseGlb)).then(([anim, guard, bizman, claudia, nathan, eric, sophia, carla, mike, zoe, roxy, maya, leo, cop2, cop3, agb1, agb2]) => {
   const clip = (g, name) => ({ clip: g.animations.find((a) => a.name === name) || g.animations[0], root: g.scene });
@@ -2534,10 +2544,14 @@ function horn(loud) {
 }
 function updateSound(dt) {
   if (!sfx.ctx || sfx.ctx.state !== 'running') return;
-  if (hero.speed > 0.4) { // one footstep per stride length covered
-    sfx.phase += hero.speed * dt / (hero.speed > 2.5 ? 1.7 : 0.78);
-    if (sfx.phase >= 1) { sfx.phase -= 1; footstep(hero.speed > 2.5 ? 1 : 0.7); }
+  if (hero.speed > 0.4 && !ride.on) { // one footstep per stride length covered (none while you ride)
+    sfx.phase += hero.speed * dt / (hero.speed > RUN_AT ? 1.7 : 0.78);
+    if (sfx.phase >= 1) { sfx.phase -= 1; footstep(hero.speed > RUN_AT ? 1 : 0.7); }
   } else sfx.phase = 0.6;
+  { const riding = ride.st === 'riding', eng = riding && ride.id !== 'bicycle', ctx = sfx.ctx, sp = Math.abs(ride.v), t = ctx.currentTime; // what you ride: a scooter or car hums with its speed, a bicycle's freewheel ticks
+    if (eng && !sfx.eng) { const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(); o.type = 'sawtooth'; f.type = 'lowpass'; f.frequency.value = 380; g.gain.value = 0; o.connect(f); f.connect(g); g.connect(sfx.out); o.start(); sfx.eng = { o, g }; }
+    if (sfx.eng) { const car = ride.id === 'car'; sfx.eng.g.gain.setTargetAtTime(eng ? (car ? 0.014 : 0.02) + sp * 0.004 : 0, t, 0.12); if (eng) sfx.eng.o.frequency.setTargetAtTime((car ? 46 : 76) + sp * (car ? 9 : 15), t, 0.1); }
+    if (riding && !eng && sp > 0.5) { sfx.tick = (sfx.tick || 0) + sp * dt / 0.45; if (sfx.tick >= 1) { sfx.tick -= 1; const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'square'; o.frequency.value = 1900; g.gain.setValueAtTime(0.01, t); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.03); o.connect(g); g.connect(sfx.out); o.start(t); o.stop(t + 0.04); } } }
   let near = 0; for (const c of cars) { const [x, z] = carPos(c), d2 = (x - hero.x) ** 2 + (z - hero.z) ** 2; near += (0.25 + c.v / 9) / (1 + d2 / 90); }
   sfx.traffic.gain.value = 0;
 }
@@ -2667,20 +2681,27 @@ function updateTraffic(dt) {
         if (cars.some((o) => o.axis !== c.axis && o.line === kb && Math.abs(o.s - mid) < F + o.kind.half + 1)) want = Math.min(want, dist > 0.6 ? Math.max(0, (dist - 0.6) * 1.2) : want);
       }
     }
-    const ha = (c.axis === 'z' ? hero.z - z : hero.x - x) * c.dir - half, hl = Math.abs(c.axis === 'z' ? hero.x - x : hero.z - z); // you, standing in the lane
-    const inLane = ha > -1 && ha < 14 && hl < c.kind.halfW + 0.9; c.see = inLane ? (c.see || 0) + dt : 0; // a driver needs a moment to notice someone who steps out
+    const ha0 = (c.axis === 'z' ? hero.z - z : hero.x - x) * c.dir - half, hl = Math.abs(c.axis === 'z' ? hero.x - x : hero.z - z); // you, standing in the lane
+    let ha = ha0, inLane = false; // ... or riding in it, or what you ride left standing in it: each as long and as wide as it is
+    for (const b of roadBlocks()) { if (!b.on) continue; const a = (c.axis === 'z' ? b.z - z : b.x - x) * c.dir - half, l = Math.abs(c.axis === 'z' ? b.x - x : b.z - z);
+      if (a > -1 - b.len && a - b.len < 14 && l < c.kind.halfW + 0.9 + b.wid && (!inLane || a - b.len < ha)) { ha = a - b.len; inLane = true; } }
+    c.see = inLane ? (c.see || 0) + dt : 0; // a driver needs a moment to notice someone who steps out
     if (c.wait > 0) { c.wait -= dt; want = 0; }
     if (inLane && (c.see > 0.45 || ha > 9 || hero.down > 0)) { want = Math.min(want, Math.max(0, (ha - 2.5) * 1.3)); c.held = c.v < 0.3 ? (c.held || 0) + dt : 0; if (c.held > 2) { horn(1); c.held = 0; } } // a driver you keep waiting sounds the horn
     c.v += clamp(want - c.v, -11 * dt, 3.2 * dt);
     c.s += c.dir * c.v * dt;
     const [nx, nz] = carPos(c); c.obj.position.set(nx, 0, nz);
-    if (c.v > 2.6 && ha > -1.1 && ha < 0.25 && hl < c.kind.halfW + 0.3) carHit(c); // its bonnet has reached you while it was still moving
+    if (c.v > 2.6 && ha0 > -1.1 && ha0 < 0.25 && hl < c.kind.halfW + 0.3) carHit(c); // its bonnet has reached you while it was still moving
     for (const w of c.wheels) w.rotateOnAxis(c.kind.axleVec, c.v * dt / c.kind.rad); // roll forwards about the axle, so the wheels do not wobble
   }
 }
-function pushOffCars() { // cars are solid: step round them
+function carTouch(wide, long) { // the traffic car you are up against, if any (you: the hero's place, taking up this much room)
+  for (const c of cars) { const [x, z] = carPos(c), a = c.axis === 'z' ? hero.z - z : hero.x - x, l = c.axis === 'z' ? hero.x - x : hero.z - z; if (c.kind.half + long - Math.abs(a) > 0 && c.kind.halfW + wide - Math.abs(l) > 0) return c; }
+  return null;
+}
+function pushOffCars(wide = 0.35, long = 0.35) { // cars are solid: step round them (wide, long: how much room you take up, more when you ride)
   for (const c of cars) {
-    const [x, z] = carPos(c), a = c.axis === 'z' ? hero.z - z : hero.x - x, l = c.axis === 'z' ? hero.x - x : hero.z - z, pa = c.kind.half + 0.35 - Math.abs(a), pl = c.kind.halfW + 0.35 - Math.abs(l);
+    const [x, z] = carPos(c), a = c.axis === 'z' ? hero.z - z : hero.x - x, l = c.axis === 'z' ? hero.x - x : hero.z - z, pa = c.kind.half + long - Math.abs(a), pl = c.kind.halfW + wide - Math.abs(l);
     if (pa <= 0 || pl <= 0) continue;
     const da = pa < pl ? Math.sign(a || 1) * pa : 0, dl = pa < pl ? 0 : Math.sign(l || 1) * pl;
     if (c.axis === 'z') { hero.z += da; hero.x += dl; } else { hero.x += da; hero.z += dl; }
@@ -2795,8 +2816,9 @@ function locate(x, z, lim, slack = 0) {
 /* ---------------- player ---------------- */
 // The main character: a young man in a dark zip jacket over a white T-shirt, blue
 // jeans and white trainers. Push the stick to walk, push it all the way to run.
+const RUN_CLIP = 5.2, RUN_AT = (logic.footSpeed(false, CONFIG) + logic.footSpeed(true, CONFIG)) / 2; /* the pace the running animation was made at (it is slowed to your real speed, so the feet do not slide); and the speed at which walking turns into running */
 const hero = { level: 0, obj: new THREE.Group(), x: 0, z: 0, y: 0.28, heading: Math.PI, speed: 0, mixer: null, acts: null, stride: 1.75, w: [1, 0, 0], placed: false, dist: 0 };
-scene.add(hero.obj);
+scene.add(hero.obj); hero.obj.rotation.order = 'YXZ';
 // (the main character is set up with the walkers, from the same realistic models)
 
 
@@ -3732,19 +3754,25 @@ function showLife(dt) {
 // it down at the gate and are paid. Late, and the customer cancels: you pay for it. Errands come in levels: each level is a
 // run of errands, and the next level pays more over longer trips with less time to spare.
 const job = { pick: 0, lookUp: 0, state: 'idle', offer: null, t: 0, total: 0, bend: 0, bendFor: '', count: 0, nextAt: 0, auto: false };
-const levelOf = (L) => ({ n: 2 + L, mult: 1 + 0.5 * (L - 1), near: [75, 135 + 10 * L], far: [110 + 20 * L, 200 + 30 * L], slack: Math.max(1.12, 1.5 - 0.08 * L) });
-const tripLen = (ax, az, bx, bz) => Math.abs(ax - bx) + Math.abs(az - bz); // along the streets, near enough
+const levelOf = (L) => logic.levelRules(L, CONFIG);
 const clockText = (t) => Math.floor(Math.max(0, t) / 60) + ':' + String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0');
 const addrText = (a) => 'No. ' + a.num + ', ' + a.street;
-function makeOffer() { // an errand that fits where you are standing: a pickup not far off, and a delivery a good walk from there
-  game.job = game.job || { level: 1, done: 0 }; const L = levelOf(game.job.level), all = [...ADDR.values()], r = Math.random;
-  const band = (list, x, z, [lo, hi]) => list.filter((a) => { const d = tripLen(a.x, a.z, x, z); return d >= lo && d <= hi; });
-  let from = band(all, hero.x, hero.z, L.near); if (!from.length) from = band(all, hero.x, hero.z, [45, 220]); if (!from.length) from = band(all, hero.x, hero.z, [15, 400]); if (!from.length) return null;
-  const a = from[Math.floor(r() * from.length)];
-  let to = band(all, a.x, a.z, L.far).filter((b) => b !== a); if (!to.length) to = band(all, a.x, a.z, [60, 320]).filter((b) => b !== a); if (!to.length) to = band(all, a.x, a.z, [20, 500]).filter((b) => b !== a); if (!to.length) return null;
-  const b = to[Math.floor(r() * to.length)], d1 = tripLen(hero.x, hero.z, a.x, a.z), d2 = tripLen(a.x, a.z, b.x, b.z);
+const STREETS = { pitch: PITCH, f: F, lane: (i, j) => laneDir(i, j) }; /* the street grid, as logic.routeFrom wants it */
+function makeOffer(rideId = 'walk') { // an errand that fits where you are standing and how you travel: a pickup not far off, a delivery a good way from there (further by faster rides)
+  game.job = game.job || { level: 1, done: 0 }; const level = game.job.level, B = logic.tripBands(level, rideId, CONFIG), all = [...ADDR.values()], r = Math.random, alleys = !!CONFIG.transport[rideId].go.alley;
+  // Distances are by the streets this traveller may use (round the block where the doors are on parallel streets; a scooter or car cannot cut through an inner street).
+  const reach = (x, z, [lo, hi], not) => { const far = logic.routeFrom(x, z, STREETS, alleys), by = all.filter((a) => a !== not).map((a) => [far(a.x, a.z), a]).filter((q) => q[0] >= 15 && isFinite(q[0])).sort((p, q) => p[0] - q[0]), fit = by.filter((q) => q[0] >= lo && q[0] <= hi);
+    if (fit.length) return fit; const under = by.filter((q) => q[0] <= hi); /* no house is known at that distance yet: the furthest fifth of those that are, or else the nearest few */
+    return under.length ? under.slice(-Math.max(1, Math.ceil(under.length / 5))) : by.slice(0, 3); };
+  const from = reach(hero.x, hero.z, B.near); if (!from.length) return null; const [d1, a] = from[Math.floor(r() * from.length)];
+  const to = reach(a.x, a.z, B.far, a); if (!to.length) return null; const [d2, b] = to[Math.floor(r() * to.length)];
   const nook = a.nook ? a.nook[r() < 0.5 ? 0 : 1] : [a.px, a.pz]; // the parcel waits tucked in a corner by the wall: you have to look for it
-  return { from: { ...a, px: nook[0], pz: nook[1] }, to: b, d1, d2, pay: Math.round((2500 + d2 * 22 + d1 * 8) * L.mult / 100) * 100, time: Math.round(((d1 + d2) / 2.9 * L.slack + 18) / 5) * 5 };
+  const plan = ridePlan(rideId), walk = plan && plan.far ? plan.d : 0; /* a ride that cannot be brought to you stands on the nearest road: the walk to it is on the clock too */
+  const pk = logic.pickPackage(rideId, r(), CONFIG, r()), terms = logic.offerTerms({ d1, d2, level, ride: rideId, pkg: pk.id, walk }, CONFIG); /* what it pays and how long you have: final, and the same as the card shows */
+  return { from: { ...a, px: nook[0], pz: nook[1] }, to: b, d1, d2, walk, ride: rideId, pkg: terms.pkg, value: pk.value, pay: terms.pay, time: terms.time };
+}
+function makeOffers() { // one errand for each way of travelling (they differ: a faster ride goes further and may carry more). Null when there is nowhere to go
+  const out = {}; for (const id of RIDES) { const o = makeOffer(id); if (o) out[id] = o; } return out.walk ? out : null;
 }
 const errandEl = $('errand'), bendEl = $('erbend'), numText = (a) => 'No. ' + a.num;
 /* ---------------- things you ride ---------------- */
@@ -3761,22 +3789,28 @@ function buildBicycle() { // made here, part by part: frame, two spoked wheels, 
   const mesh = (geos, mat, name) => { const m = new THREE.Mesh(mergeGeometries(geos), mat); geos.forEach((x) => x.dispose()); m.castShadow = HQ; if (name) m.name = name; return m; };
   const paint = rideMat('#e8492e', 0.42, 0.1), steel = rideMat('#c6cace', 0.35, 0.6), black = rideMat('#1b1d21', 0.85), wicker = rideMat('#c99b5c', 0.9);
   const R = 0.34, AR = P(R, -0.52), AF = P(R, 0.54), BB = P(0.29, -0.06), ST = P(0.8, -0.21), HT = P(0.87, 0.365), HB = P(0.7, 0.41), SM = P(1.02, 0.325), side = (v, x) => v.clone().setX(x);
-  g.add(mesh([tube(BB, ST, 0.019), tube(ST, HT, 0.017), tube(BB, HB, 0.021), tube(HB, HT, 0.025), box(0.13, 0.03, 0.05, 0, HB.y - 0.01, HB.z + 0.005),
-    ...[-1, 1].flatMap((s) => [tube(side(AR, s * 0.06), side(BB, s * 0.03), 0.011, 6), tube(side(AR, s * 0.06), side(ST, s * 0.02), 0.009, 6), tube(side(HB, s * 0.055), side(AF, s * 0.06), 0.012, 6)])], paint));
+  // Two parts move: 'steer' (fork, stem, handlebars, basket and front wheel, turning about the head tube) and 'crank' (the cranks and the two pedals, turning about the bottom bracket).
+  const steer = new THREE.Group(), crank = new THREE.Group(), into = (grp, ...kids) => { for (const kid of kids) { kid.position.sub(grp.position); grp.add(kid); } }; // (each part keeps its place: it is only handed to the group that turns it)
+  steer.name = 'steer'; steer.position.copy(HB); steer.userData = { axis: HT.clone().sub(HB).normalize().toArray() };
+  crank.name = 'crank'; crank.position.copy(BB); crank.userData = { r: Math.hypot(0.085, 0.14), x: 0.145, a0: Math.atan2(0.14, -0.085) }; // r: the crank's length; x: how far out the pedals are; a0: where the right-hand pedal stands at rest
+  g.add(mesh([tube(BB, ST, 0.019), tube(ST, HT, 0.017), tube(BB, HB, 0.021), tube(HB, HT, 0.025),
+    ...[-1, 1].flatMap((s) => [tube(side(AR, s * 0.06), side(BB, s * 0.03), 0.011, 6), tube(side(AR, s * 0.06), side(ST, s * 0.02), 0.009, 6)])], paint));
   const ped = [1, -1].map((s) => P(BB.y - s * 0.085, BB.z + s * 0.14, s * 0.1)); // the two pedals, one forward and down, one back and up
-  g.add(mesh([tube(ST, P(0.915, -0.243), 0.012), tube(HT, SM, 0.013), tube(P(SM.y, SM.z, -0.11), P(SM.y, SM.z, 0.11), 0.012), ...[-1, 1].map((s) => tube(P(SM.y, SM.z, s * 0.11), P(SM.y + 0.02, SM.z - 0.085, s * 0.25), 0.012)),
-    tube(side(BB, -0.1), side(BB, 0.1), 0.013), ...ped.map((p, i) => tube(side(BB, p.x), p, 0.011, 6)), new THREE.CylinderGeometry(0.085, 0.085, 0.006, 18).rotateZ(Math.PI / 2).translate(0.045, BB.y, BB.z),
-    ...[-1, 1].map((s) => tube(P(SM.y, SM.z, s * 0.09), P(SM.y - 0.03, SM.z + 0.16, s * 0.09), 0.006, 5))], steel)); // (the last two: the arms the basket hangs on)
-  g.add(mesh([new THREE.SphereGeometry(1, 12, 7).scale(0.078, 0.028, 0.135).translate(0, 0.935, -0.25), ...[-1, 1].map((s) => tube(P(SM.y + 0.02, SM.z - 0.085, s * 0.25), P(SM.y + 0.024, SM.z - 0.14, s * 0.3), 0.017)),
-    ...ped.map((p) => box(0.09, 0.022, 0.065, p.x + Math.sign(p.x) * 0.045, p.y, p.z))], black));
+  g.add(mesh([tube(ST, P(0.915, -0.243), 0.012), tube(side(BB, -0.1), side(BB, 0.1), 0.013)], steel), mesh([new THREE.SphereGeometry(1, 12, 7).scale(0.078, 0.028, 0.135).translate(0, 0.935, -0.25)], black));
+  into(steer, mesh([box(0.13, 0.03, 0.05, 0, HB.y - 0.01, HB.z + 0.005), ...[-1, 1].map((s) => tube(side(HB, s * 0.055), side(AF, s * 0.06), 0.012, 6))], paint),
+    mesh([tube(HT, SM, 0.013), tube(P(SM.y, SM.z, -0.11), P(SM.y, SM.z, 0.11), 0.012), ...[-1, 1].map((s) => tube(P(SM.y, SM.z, s * 0.11), P(SM.y + 0.02, SM.z - 0.085, s * 0.25), 0.012)),
+      ...[-1, 1].map((s) => tube(P(SM.y, SM.z, s * 0.09), P(SM.y - 0.03, SM.z + 0.16, s * 0.09), 0.006, 5))], steel), // (the last two: the arms the basket hangs on)
+    mesh([-1, 1].map((s) => tube(P(SM.y + 0.02, SM.z - 0.085, s * 0.25), P(SM.y + 0.024, SM.z - 0.14, s * 0.3), 0.017)), black));
+  into(crank, mesh([...ped.map((p) => tube(side(BB, p.x), p, 0.011, 6)), new THREE.CylinderGeometry(0.085, 0.085, 0.006, 18).rotateZ(Math.PI / 2).translate(0.045, BB.y, BB.z)], steel));
+  for (const p of ped) { const m = mesh([new THREE.BoxGeometry(0.09, 0.022, 0.065)], black, 'pedal'); m.position.set(p.x + Math.sign(p.x) * 0.045, p.y, p.z); into(crank, m); }
   { const w = 0.36, h = 0.2, d = 0.25, t = 0.014, b = new THREE.Group(); b.name = 'basket'; b.position.set(0, SM.y - 0.2, SM.z + 0.14 + d / 2); b.userData = { w, h, d }; // the basket: 'basket' sits at the middle of its floor
     b.add(mesh([box(w, t, d, 0, t / 2, 0), box(w, h, t, 0, h / 2, d / 2 - t / 2), box(w, h, t, 0, h / 2, -d / 2 + t / 2), box(t, h, d, w / 2 - t / 2, h / 2, 0), box(t, h, d, -w / 2 + t / 2, h / 2, 0),
-      box(w + 0.02, 0.024, 0.024, 0, h, d / 2 - t / 2), box(w + 0.02, 0.024, 0.024, 0, h, -d / 2 + t / 2), box(0.024, 0.024, d, w / 2 - t / 2, h, 0), box(0.024, 0.024, d, -w / 2 + t / 2, h, 0)], wicker)); g.add(b); }
+      box(w + 0.02, 0.024, 0.024, 0, h, d / 2 - t / 2), box(w + 0.02, 0.024, 0.024, 0, h, -d / 2 + t / 2), box(0.024, 0.024, d, w / 2 - t / 2, h, 0), box(0.024, 0.024, d, -w / 2 + t / 2, h, 0)], wicker)); into(steer, b); }
   const tyre = new THREE.TorusGeometry(R - 0.021, 0.021, 8, 28).rotateY(Math.PI / 2), rim = [new THREE.TorusGeometry(R - 0.05, 0.011, 6, 24).rotateY(Math.PI / 2), new THREE.CylinderGeometry(0.024, 0.024, 0.11, 8).rotateZ(Math.PI / 2)];
   for (let i = 0; i < 8; i++) rim.push(new THREE.CylinderGeometry(0.0045, 0.0045, 2 * (R - 0.05), 3, 1, true).rotateX(i * Math.PI / 8 + 0.1));
   const wt = mesh([tyre], black), wr = mesh(rim, steel);
-  for (const [name, at] of [['wheelR', AR], ['wheelF', AF]]) { const w = new THREE.Group(); w.name = name; w.position.copy(at); w.userData = { rad: R }; w.add(name === 'wheelR' ? wt : wt.clone(), name === 'wheelR' ? wr : wr.clone()); g.add(w); }
-  const grips = rideSpot('grips', 0, SM.y + 0.022, SM.z - 0.11); grips.userData = { half: 0.275 }; g.add(rideSpot('seat', 0, 0.963, -0.25), grips);
+  for (const [name, at] of [['wheelR', AR], ['wheelF', AF]]) { const w = new THREE.Group(); w.name = name; w.position.copy(at); w.userData = { rad: R }; w.add(name === 'wheelR' ? wt : wt.clone(), name === 'wheelR' ? wr : wr.clone()); if (name === 'wheelF') into(steer, w); else g.add(w); }
+  const grips = rideSpot('grips', 0, SM.y + 0.022, SM.z - 0.11); grips.userData = { half: 0.275 }; g.add(rideSpot('seat', 0, 0.963, -0.25), steer, crank); into(steer, grips);
   return g;
 }
 function buildScooter() { // the "Vino" scooter (models/CREDITS.txt), slimmed by tools/slim_scooter.py: body + two wheels, and a delivery box on the back
@@ -3790,20 +3824,29 @@ function buildScooter() { // the "Vino" scooter (models/CREDITS.txt), slimmed by
   const grips = rideSpot('grips', 0, 0.97, 0.3); grips.userData = { half: 0.28 }; g.add(rideSpot('seat', 0, 0.74, -0.2), grips);
   return g;
 }
+function limePaint(map) { // the car's own picture of its bodywork with the paint turned lime. (Tinting is not enough: the picture's paint is teal, and teal times lime is plain green.)
+  try { const im = map.image, cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height; const g2 = cv.getContext('2d', { willReadFrequently: true }); g2.drawImage(im, 0, 0);
+    const px = g2.getImageData(0, 0, cv.width, cv.height), q = px.data, to = new THREE.Color(RIDE_CAR_PAINT).convertLinearToSRGB(); let peak = 1;
+    for (let i = 0; i < q.length; i += 4) { const hi = Math.max(q[i], q[i + 1], q[i + 2]); if (hi - Math.min(q[i], q[i + 1], q[i + 2]) > 40 && hi > peak) peak = hi; }           /* the brightest the paint gets */
+    for (let i = 0; i < q.length; i += 4) { const hi = Math.max(q[i], q[i + 1], q[i + 2]), lo = Math.min(q[i], q[i + 1], q[i + 2]); if (hi - lo <= 40) continue;                 /* greys and blacks (trim, shadow lines) stay as they are */
+      const v = Math.min(1, hi / peak) * 255; q[i] = to.r * v; q[i + 1] = to.g * v; q[i + 2] = to.b * v; }
+    g2.putImageData(px, 0, 0); const t = new THREE.CanvasTexture(cv); t.flipY = map.flipY; t.colorSpace = map.colorSpace; t.wrapS = map.wrapS; t.wrapT = map.wrapT; t.repeat.copy(map.repeat); t.offset.copy(map.offset); t.channel = map.channel; return t;
+  } catch (e) { return null; }
+}
 function buildCar() { // your own car: the smallest of the cars in the traffic, in a paint nobody else has
   if (!carKinds.length) return null; const kind = carKinds.reduce((a, b) => (b.half < a.half ? b : a)), g = kind.tpl.clone(true); g.name = 'car'; g.userData = { half: kind.half, halfW: kind.halfW, rad: kind.rad, kind: kind.name };
   let paint = null; g.traverse((o) => { if (!o.isMesh) return; o.castShadow = o.receiveShadow = HQ;
-    if (/^body/i.test(o.material.name)) { if (!paint) { paint = Object.assign(o.material.clone(), { color: new THREE.Color(RIDE_CAR_PAINT), name: o.material.name }); if (HQ) shiny(paint); } o.material = paint; } });
+    if (/^body/i.test(o.material.name)) { if (!paint) { paint = Object.assign(o.material.clone(), { color: new THREE.Color(RIDE_CAR_PAINT), name: o.material.name }); const own = limePaint(o.material.map); if (own) { paint.map = own; paint.color.set('#ffffff'); } if (HQ) shiny(paint); } o.material = paint; } });
   return g;
 }
 const RIDE_BUILD = { bicycle: buildBicycle, scooter: buildScooter, car: buildCar };
 function rideModel(id) { const t = RIDE_TPL[id] || (RIDE_BUILD[id] && (RIDE_TPL[id] = RIDE_BUILD[id]())); return t ? t.clone(true) : null; }
 function rideTris(o) { let n = 0; o.traverse((m) => { if (m.isMesh) n += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; }); return Math.round(n); }
-new GLTFLoader().parse(rideScooterGlb.buffer.slice(rideScooterGlb.byteOffset, rideScooterGlb.byteOffset + rideScooterGlb.byteLength), '', (gltf) => { RIDE_SRC.scooter = gltf.scene; }, (e) => console.error('scooter failed to load', e));
+new GLTFLoader().parse(rideScooterGlb.buffer.slice(rideScooterGlb.byteOffset, rideScooterGlb.byteOffset + rideScooterGlb.byteLength), '', (gltf) => { RIDE_SRC.scooter = gltf.scene; makeRideArt(); }, (e) => console.error('scooter failed to load', e));
 // The pictures on the travel card: each thing drawn once from its real model, by the game's own renderer into one small hidden
-// picture that is thrown away afterwards. (The scooter keeps the picture made from the full-detail model, RIDE_ART.scooter.)
+// picture that is thrown away afterwards. (RIDE_ART.scooter, a picture made earlier, only stands in until the scooter's model has loaded.)
 function makeRideArt() {
-  const ids = logic.rideIds(CONFIG).filter((id) => id !== 'walk' && !RIDE_PIC[id] && !RIDE_ART[id] && (id !== 'car' || carKinds.length)); if (!ids.length) return;
+  const ids = logic.rideIds(CONFIG).filter((id) => id !== 'walk' && !RIDE_PIC[id] && (id !== 'car' || carKinds.length) && (id !== 'scooter' || RIDE_SRC.scooter)); if (!ids.length) return;
   const W = 520, H = 400, keep = renderer.getRenderTarget(), col = renderer.getClearColor(new THREE.Color()), alpha = renderer.getClearAlpha(); let rt = null;
   try {
     rt = new THREE.WebGLRenderTarget(W, H, { samples: 4 }); const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(18, W / H, 0.1, 80), buf = new Uint8Array(W * H * 4), bx = new THREE.Box3(), ball = new THREE.Sphere();
@@ -3865,12 +3908,17 @@ function pickFoot(id) { // under the tiles: one short line (Owned / what you sti
     : `<button class="price off" type="button" data-act="locked" aria-disabled="true"><i class="c"></i><span>${esc(o.price)}</span>${ER_ICON.lock}</button>`;
   return `<p class="nt${ask ? ' ask' : o.act === 'short' ? ' need' : ''}">${o.tag && !ask ? ER_ICON.check : ''}<span>${esc(line)}</span></p>${btn}`;
 }
+function pickTerms(id) { // what this errand is by this way of travelling: the parcel, the pay, the time. These are final: what Start sets off with
+  const o = job.offers && job.offers[id]; if (!o) return '';
+  return `<span>${ER_ICON.box}<b>${esc(CONFIG.packages[o.pkg].name)}</b></span><span>${ER_ICON.coins}<b>${esc(cash(o.pay))}</b></span><span>${ER_ICON.clock}<b>${clockText(o.time)}</b></span>`;
+}
 function errandCard() { // the four ways to travel side by side on one glossy card; the one you chose stands in the middle
   const at = job.pick, id = RIDES[at], last = RIDES.length - 1, opts = RIDES.map(rideOpt);
   return `<div class="pick"><div class="hd"><h2>How do you want to run your errand?</h2><button class="x" type="button" data-act="skip" aria-label="Not now"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.500 3.500l9 9M12.500 3.500l-9 9" fill="none" stroke="#141a22" stroke-width="2.400" stroke-linecap="round"/></svg></button></div>
     <div class="rail"><div class="trk" style="--at:${at}">${opts.map((o, i) => `<span class="it${i === at ? ' on' : ''}${o.act === 'short' ? ' short' : ''}">${o.id === 'walk' ? '<canvas class="me"></canvas>' : `<img class="v ${o.id}" src="${ridePic(o.id)}" alt="">`}</span>`).join('')}</div>
       <button class="nav l" type="button" data-act="step" data-d="-1" aria-label="Back"${at ? '' : ' disabled'}>${CHEV}</button><button class="nav r" type="button" data-act="step" data-d="1" aria-label="Next"${at < last ? '' : ' disabled'}>${CHEV}</button></div>
     <h3 id="pkname">${esc(opts[at].name)}</h3>
+    <div class="terms" id="pkterms">${pickTerms(id)}</div>
     <div class="opts">${opts.map((o, i) => `<button type="button" class="op${i === at ? ' on' : ''}${o.owned ? '' : ' lock'}${o.act === 'short' ? ' short' : ''}" data-act="mode" data-i="${i}" aria-label="${esc(o.name + (o.tag ? ', owned' : o.need ? ', ' + o.need : o.price ? ', ' + o.price : ''))}" aria-pressed="${i === at}"><img class="${o.id === 'walk' ? 'me' : o.id}" src="${o.id === 'walk' ? HERO_BUST[hero.who] || HERO_FACE[hero.who] || '' : ridePic(o.id)}" alt="">${o.owned ? (o.tag ? `<span class="lk">${ER_ICON.check}</span>` : '') : `<span class="lk">${ER_ICON.lock}</span>`}</button>`).join('')}</div>
     <div id="pkcta">${pickFoot(id)}</div></div>`;
 }
@@ -3880,21 +3928,24 @@ function pickStep(d) { // slide to the next one: nothing is rebuilt, so it glide
   trk.style.setProperty('--at', n); [...trk.children].forEach((c, i) => c.classList.toggle('on', i === n));
   [...bendEl.querySelectorAll('.op')].forEach((c, i) => { c.classList.toggle('on', i === n); c.setAttribute('aria-pressed', String(i === n)); });
   bendEl.querySelector('.nav.l').disabled = n === 0; bendEl.querySelector('.nav.r').disabled = n === RIDES.length - 1;
-  const h = $('pkname'); h.textContent = CONFIG.transport[id].name; h.classList.remove('sw'); void h.offsetWidth; h.classList.add('sw'); $('pkcta').innerHTML = pickFoot(id);
+  const h = $('pkname'); h.textContent = CONFIG.transport[id].name; h.classList.remove('sw'); void h.offsetWidth; h.classList.add('sw'); $('pkterms').innerHTML = pickTerms(id); $('pkcta').innerHTML = pickFoot(id);
   chime([740], 'triangle', 0.04, 0.05, 0.03);
 }
 function pickAsk(id) { // the price was tapped: ask before any money moves
   if (rideOpt(id).act !== 'buy') return; job.ask = id; job.askAt = performance.now(); $('pkcta').innerHTML = pickFoot(id); chime([660, 880], 'triangle', 0.05, 0.08, 0.04);
 }
 function pickBuy(id) { // "Buy" was tapped: pay once, and it is yours for good
+  if (job.state !== 'offer' || errandEl.hidden) return; /* (only from the card, while it is up) */
   if (job.ask !== id || performance.now() - job.askAt < 350) return; /* (the second half of a double tap on the price is not a yes) */
   job.ask = null; const was = game.money, took = logic.buyRide(game, id, CONFIG);
-  if (took.ok) { game.money = took.money; game.rides = took.rides; save(); moneyCount(was - (ui.hold || 0)); gain(-(was - took.money), CONFIG.transport[id].name); chime([784, 1047, 1319, 1568], 'triangle', 0.07, 0.16, 0.07); }
+  if (took.ok) { job.boughtAt = performance.now(); game.money = took.money; game.rides = took.rides; save(); moneyCount(was - (ui.hold || 0)); gain(-(was - took.money), CONFIG.transport[id].name); chime([784, 1047, 1319, 1568], 'triangle', 0.07, 0.16, 0.07); }
   else chime([300, 240], 'triangle', 0.08, 0.1, 0.05);
   bendEl.innerHTML = errandCard(); walkPlay(); /* it now shows as yours, with Start (or, had the money gone meanwhile, as it really is) */
 }
 function pickStart(id) { // set off by the one you chose: only by something you own
-  if (job.state !== 'offer' || rideOpt(id).act !== 'start') return; game.ride = id; save(); startErrand();
+  if (job.state !== 'offer' || rideOpt(id).act !== 'start') return;
+  if (performance.now() - (job.boughtAt || -1e9) < CONFIG.ride.startGuard) return; /* (Start has only just appeared, under the finger that tapped Buy) */
+  const o = job.offers && job.offers[id]; if (!o) return; game.ride = id; save(); job.offer = o; startErrand(); /* the errand as the card showed it for this way of travelling */
 }
 function openPicker() { // page two of an errand: how to travel
   if (job.state !== 'offer') return; job.pick = logic.ridePick(game, CONFIG); job.ask = null; ui.busy = true; makeRideArt(); errandEl.hidden = false; bendErrand();
@@ -3912,7 +3963,7 @@ function showBrief() { // your own character, speaking: what the errand is
   $('brface').src = HERO_BUST[hero.who] || HERO_FACE[hero.who] || ''; $('brname').textContent = game.name || who; $('brname').hidden = !game.name;
   if (!game.name) { briefFull = ''; briefAt = 0; clearInterval(briefTimer); $('brtext').textContent = 'Hi! What should I call you?'; $('brform').hidden = false; briefEl.classList.remove('done'); briefEl.classList.add('ask'); briefEl.hidden = false; setTimeout(() => $('brin').focus(), 350); return; }
   $('brform').hidden = true; briefEl.classList.remove('ask');
-  briefFull = (game.jobs ? 'New errand! ' : 'My first errand! ') + 'Pick up a parcel at ' + numText(o.from).replace(' ', '') + ' and deliver it to ' + numText(o.to).replace(' ', '') + '. It pays ' + cash(o.pay) + ' and we have ' + clockText(o.time) + '. Let’s be quick!';
+  briefFull = (game.jobs ? 'New errand! ' : 'My first errand! ') + 'A parcel needs delivering. How shall we go?'; /* (where to, what it pays and how long we have depend on how we travel: the next card shows them) */
   briefGo = openPicker; briefNo = null; $('brno').hidden = true; $('brgo').textContent = 'Next'; briefEl.classList.remove('plain', 'other'); speak();
 }
 function speak() { // the words come out as if spoken
@@ -3937,12 +3988,12 @@ $('brform').addEventListener('submit', (e) => { e.preventDefault(); const v = $(
 function openErrand() {
   if (job.state !== 'idle' && job.state !== 'offer') return;
   if (game.hurt) { note('Get treated first: tap the hospital in the menu.', 4); return; }
-  if (ui.busy) return; const o = job.offer = makeOffer(); if (!o) { note('No errands near here just now.', 3); return; }
+  if (ui.busy) return; job.offers = makeOffers(); const o = job.offer = job.offers && job.offers.walk; if (!o) { note('No errands near here just now.', 3); return; }
   job.state = 'offer'; ui.busy = true; showBrief(); chime([660, 880], 'triangle', 0.06, 0.1, 0.05);
 }
 const latePenalty = (o) => Math.round(o.pay * CONFIG.lateShare / 100) * 100;
-function closeErrand() { errandEl.hidden = true; briefEl.hidden = true; clearInterval(briefTimer); ui.busy = false; if (job.state === 'offer') job.state = 'idle'; }
-const startErrand = () => { errandEl.hidden = true; job.state = 'count'; job.count = 3.999; ui.busy = true; countShow(3); };
+function closeErrand() { errandEl.hidden = true; briefEl.hidden = true; clearInterval(briefTimer); ui.busy = false; job.ask = null; if (job.state === 'offer') job.state = 'idle'; }
+const startErrand = () => { errandEl.hidden = true; job.state = 'count'; job.count = 3.999; ui.busy = true; countShow(3); rideCall(job.offer.ride); };
 errandEl.addEventListener('click', (e) => { if (errandEl.dataset.swiped) return; // (a swipe is not a tap)
   const b = e.target.closest('[data-act]'); if (!b) { if (e.target === errandEl) closeErrand(); return; } // a tap on the empty background puts it away, like the menu
   const id = RIDES[job.pick]; if (b.dataset.act === 'skip') closeErrand(); else if (b.dataset.act === 'start') pickStart(id);
@@ -4054,15 +4105,16 @@ function hzSay(h) {
 }
 function hzTick(dt) {
   const on = job.state === 'pickup' || job.state === 'deliver', now = performance.now(); if (hero.free > 0) hero.free -= dt;
-  if (on && !ui.busy && now > hzNext) { hzNext = now + 7000; hzSpawn(); }
+  const more = (job.stops || 0) < CONFIG.stops.perLeg; /* only so many stops on each leg of an errand */
+  if (on && !ui.busy && now > hzNext && more) { hzNext = now + 7000; hzSpawn(); }
   for (let i = hz.length - 1; i >= 0; i--) {
     const h = hz[i], dx = hero.x - h.x, dz = hero.z - h.z, d = Math.hypot(dx, dz) || 0.001, held = h.state === 'stop' || h.state === 'talk' || h.state === 'hold';
     if ((!on && !held) || d > 80) { if (h.state === 'stop') ui.busy = false; h.mixer.stopAllAction(); h.mixer.uncacheRoot(h.inner); scene.remove(h.obj); hz.splice(i, 1); continue; }
-    let sp = 0, gx = 0, gz = 0; const ok = on && !ui.busy && !(hero.down > 0) && !(hero.free > 0) && job.bend <= 0;
+    let sp = 0, gx = 0, gz = 0; const ok = on && more && !ui.busy && !(hero.down > 0) && !(hero.free > 0) && job.bend <= 0;
     if (h.state === 'wait' && d < (h.type === 'agbero' ? 15 : 18) && ok) { h.state = 'come'; h.t = 0; if (h.type === 'police') chime([2350, 2350, 2350], 'square', 0.16, 0.13, 0.035); } // the officer blows his whistle
     if (h.state === 'come') { h.t += dt;
-      if (d > 30 || h.t > 16 || !on || hero.down > 0) h.state = 'back';
-      else if (d < 2.6 && ok) { h.state = 'stop'; h.t = 0; ui.busy = true; hero.speed = 0; chime([196, 233], 'square', 0.12, 0.14, 0.05); } // near enough: you stop for him
+      if (d > 30 || h.t > 16 || !on || !more || hero.down > 0) h.state = 'back';
+      else if (d < 2.6 && ok) { h.state = 'stop'; h.t = 0; job.stops = (job.stops || 0) + 1; ui.busy = true; hero.speed = 0; chime([196, 233], 'square', 0.12, 0.14, 0.05); } // near enough: you stop for him
       else if (!ui.busy) { sp = h.type === 'agbero' ? 3.3 : 2.9; gx = dx / d; gz = dz / d; } }
     if (h.state === 'stop') { h.t += dt; hero.heading += angDiff(Math.atan2(-dx, -dz), hero.heading) * Math.min(1, dt * 6); // you turn to him as he steps up in front of you
       if (d > 1.25) { sp = 1.5; gx = dx / d; gz = dz / d; } else if (h.t > 1.5) hzSay(h); }
@@ -4082,6 +4134,7 @@ function hzTick(dt) {
 // Knocked down by a car: you are thrown back and lie in the road for a moment, the errand in hand is lost and its level starts again,
 // and you are hurt (no running, no new errands) until you treat yourself from the hospital in the menu.
 function carHit(c) {
+  if (ride.on && ride.id === 'car') return; /* inside your own car a bump does not knock you down */
   if (hero.down > 0 || hero.safe > 0 || job.state === 'offer' || job.state === 'count' || locateRoom()) return;
   const dx = c.axis === 'z' ? 0 : c.dir, dz = c.axis === 'z' ? c.dir : 0;
   c.v = 0; c.wait = 5; hero.down = 3.1; hero.push = [dx, dz, 2.2]; hero.heading = Math.atan2(-dx, -dz); hero.safe = 7; ui.busy = true; game.hurt = true;
@@ -4104,10 +4157,10 @@ function treat() { // from the hospital in the menu: pay, and you are well again
 function aim(name, x, z) { ui.dest = { name, x, z, errand: true }; mapT = 0; }
 function startBend(what) { job.bend = 1.7; job.bendFor = what; job.done = false; ui.busy = true; }
 function endErrand(paid, hit) { // paid, cancelled for being late, or lost because a car knocked you down
-  const o = job.offer, J = game.job, was = job.state; job.state = 'idle'; ui.dest = null; mapT = 0; jobPin.visible = false; $('job').hidden = true;
+  const o = job.offer, J = game.job, was = job.state; job.state = 'idle'; ride.near = false; rideEnd(hit); ui.dest = null; mapT = 0; jobPin.visible = false; $('job').hidden = true;
   if (paid) { game.money = logic.earn(game.money, o.pay); gain(o.pay, 'Delivered'); coinDrop(o.pay); J.done++; game.jobs = (game.jobs || 0) + 1;
-    const L = levelOf(J.level); if (J.done >= L.n) { const bonus = 5000 * J.level; J.level++; J.done = 0; game.money = logic.earn(game.money, bonus); setTimeout(() => { gain(bonus, 'Bonus'); coinDrop(bonus); }, 2300); } }
-  else { if (hit) J.done = 0; else { const took = logic.spendUpTo(game.money, latePenalty(o)), fine = took.paid; game.money = took.money; gain(-fine, 'Cancelled'); chime([330, 247, 196], 'sawtooth', 0.14, 0.3, 0.07); } // knocked down: no fine, but the level starts again
+    const L = levelOf(J.level); if (J.done >= L.n) { const bonus = logic.levelBonus(J.level, CONFIG); J.level++; J.done = 0; game.money = logic.earn(game.money, bonus); setTimeout(() => { gain(bonus, 'Bonus'); coinDrop(bonus); }, 2300); } }
+  else { if (hit) J.done = 0; else { const took = logic.spendUpTo(game.money, latePenalty(o)), fine = took.paid; game.money = took.money; if (fine > 0) gain(-fine, 'Cancelled'); else note('Too late: errand cancelled', 3.5); chime([330, 247, 196], 'sawtooth', 0.14, 0.3, 0.07); } // knocked down: no fine, but the level starts again
     if (parcel.visible) { const d = makeParcel(), held = was === 'deliver'; d.position.set(held ? hero.x + Math.sin(hero.heading) * 0.5 : parcel.position.x, held ? hero.y : parcel.position.y, held ? hero.z + Math.cos(hero.heading) * 0.5 : parcel.position.z); d.rotation.y = parcel.rotation.y; scene.add(d); dropped.push(d); parcel.visible = false; } } // the parcel is left where it is
 
   save(); job.offer = null; job.nextAt = performance.now() + (paid ? 3200 : 4200);
@@ -4120,16 +4173,20 @@ function errandTick(dt) {
     return; }
   if (job.state === 'offer') return;
   const o = job.offer;
-  if (job.state === 'count') { const was = Math.floor(job.count); job.count -= dt; const now = Math.floor(job.count); if (now !== was) countShow(now > 0 ? now : now === 0 ? 0 : null);
-    if (job.count < 0) { countShow(null); ui.busy = false; job.state = 'pickup'; job.t = job.total = o.time; parcel.visible = true; parcel.position.set(o.from.px, locY(o.from.px, o.from.pz), o.from.pz); parcel.rotation.set(0, Math.random() * 3, 0); aim('Pickup', o.from.x, o.from.z); $('job').hidden = false; lastJob = ''; }
+  if (job.state === 'count') { const was = Math.floor(job.count); job.count -= dt; if ((ride.st === 'walk' || ride.st === 'mount') && job.count < 1.02) job.count = 1.02; /* GO waits until you are seated */
+    const now = Math.floor(job.count); if (now !== was) countShow(now > 0 ? now : now === 0 ? 0 : null);
+    if (job.count < 0) { countShow(null); ui.busy = false; job.state = 'pickup'; job.t = job.total = o.time; parcel.visible = true; parcel.scale.setScalar(1); parcel.position.set(o.from.px, locY(o.from.px, o.from.pz), o.from.pz); parcel.rotation.set(0, Math.random() * 3, 0); job.stops = 0; rideLead(); $('job').hidden = false; lastJob = ''; }
     return; }
   job.t -= dt;
   const tgt = job.state === 'pickup' ? o.from : o.to, far = Math.hypot(tgt.px - hero.x, tgt.pz - hero.z);
-  jobPin.visible = Math.hypot(tgt.x - hero.x, tgt.z - hero.z) > (job.state === 'pickup' ? 13 : 3); jobPin.position.set(tgt.x, 3.3 + Math.sin(performance.now() / 420) * 0.12, tgt.z);
+  { const lead = ride.far && ride.id && ride.st === 'parked' && job.state === 'pickup', px = lead ? ride.x : tgt.x, pz = lead ? ride.z : tgt.z; /* the pin stands over your ride until you have got on it, then over the door */
+    jobPin.visible = Math.hypot(px - hero.x, pz - hero.z) > (lead ? 4 : job.state === 'pickup' ? 13 : 3); jobPin.position.set(px, 3.3 + Math.sin(performance.now() / 420) * 0.12, pz); }
   { const label = (job.state === 'pickup' ? 'Pick up at ' : 'Deliver to ') + numText(tgt), txt = clockText(job.t), key = txt + label + (job.t < 20);
     if (key !== lastJob) { lastJob = key; $('jobtv').textContent = txt; const pick = job.state === 'pickup'; $('jobls').textContent = pick ? 'Pick up at' : 'Deliver to'; $('joblb').textContent = numText(tgt).replace(' ', ''); $('job').classList.toggle('late', job.t < 20); } }
   if (job.t <= 0 && job.bend <= 0) { endErrand(false); return; }
-  if (job.bend <= 0 && !ui.busy && far < 1.25) startBend(job.state === 'pickup' ? 'take' : 'give'); // close enough: you bend to it by yourself
+  ride.near = ride.st === 'riding' && far < 2.6; /* right by it: you pull up */
+  if (ride.st === 'riding' && ride.run > 1.5 && far < CONFIG.ride.autoOff && Math.abs(ride.v) < CONFIG.ride.stopped) rideOff(); /* stopped close by: you get off by yourself, and walk the last steps (the parcel is by a wall on the pavement) */
+  if (job.bend <= 0 && !ui.busy && !ride.on && ride.st !== 'walk' && far < 1.25) startBend(job.state === 'pickup' ? 'take' : 'give'); // close enough: you bend to it by yourself
 }
 let lastJob = '';
 const locY = (x, z) => { const q = locate(x, z, F - 0.3); return q ? q.y : 0.28; };
@@ -4158,12 +4215,12 @@ function errandPose(dt) {
     if (foot) hero.model.position.y -= foot.getWorldPosition(_hw).y - y0; // the hips come down so the feet stay on the ground
     job.bend -= dt;
     if (!job.done && p >= 0.5) { job.done = true; // the moment the hands are down
-      if (job.bendFor === 'take') { job.state = 'deliver'; chime([660, 880], 'triangle', 0.06, 0.12, 0.07); aim('Deliver', o.to.x, o.to.z); }
+      if (job.bendFor === 'take') { job.state = 'deliver'; job.stops = 0; ride.far = false; chime([660, 880], 'triangle', 0.06, 0.12, 0.07); aim('Deliver', o.to.x, o.to.z); }
       else { const d = makeParcel(); d.position.set(o.to.px, locY(o.to.px, o.to.pz), o.to.pz); d.rotation.y = hero.heading; scene.add(d); dropped.push(d); parcel.visible = false; } }
     if (job.bend <= 0) { ui.busy = false; if (job.bendFor === 'give') endErrand(true); }
   }
   // Carrying: each upper arm is pointed down and a little forward, each forearm forward and a little in, so the hands meet under the box.
-  const carry = parcel.visible && job.state === 'deliver';
+  const riding = ride.on && ride.k > 0.5, carry = parcel.visible && job.state === 'deliver' && !riding; /* (while you ride it travels in the basket or the box: rideCarry) */
   job.hold = clamp((job.hold || 0) + (carry && job.bend <= 0 ? 1 : -1) * dt * 3.5, 0, 1);
   if (job.hold > 0.001 && R.arms.length === 2 && R.fore.length === 2) {
     const fx = Math.sin(hero.heading), fz = Math.cos(hero.heading), rx = Math.cos(hero.heading), rz = -Math.sin(hero.heading), w = job.hold * job.hold * (3 - 2 * job.hold);
@@ -4173,10 +4230,250 @@ function errandPose(dt) {
       up.getWorldPosition(_hw); const side = Math.sign((_hw.x - hero.x) * rx + (_hw.z - hero.z) * rz) || 1; // which side of the body this arm is on
       point(up, fo, side * 0.16, -0.9, 0.3); point(fo, hd, -side * 0.34, 0.1, 0.94); }
   }
-  if (carry) { // the box sits between the hands, held against the body
+  if (carry) { parcel.scale.setScalar(1); // the box sits between the hands, held against the body
     if (R.hands.length === 2) { R.hands[0].getWorldPosition(_hw); R.hands[1].getWorldPosition(_hv); const fx = Math.sin(hero.heading), fz = Math.cos(hero.heading);
       parcel.position.set((_hw.x + _hv.x) / 2 + fx * 0.07, (_hw.y + _hv.y) / 2 - PARCEL[1] * 0.42, (_hw.z + _hv.z) / 2 + fz * 0.07); } else parcel.position.set(hero.x, hero.y + 0.95, hero.z);
     parcel.rotation.set(0, hero.heading, 0); }
+}
+/* ---------------- riding ---------------- */
+// The bicycle, scooter or car you chose for this errand. One of each is made the first time it is wanted and then kept (shown and
+// hidden, never thrown away). It is brought to you as the countdown starts, you ride it with the same stick you walk with, and it
+// goes when the errand is over. Every number that tunes it is in config.js; the rules (speed, where each may go) are in logic.js.
+// ride.st: 'off' nothing out | 'parked' standing where it was left | 'walk' you are stepping up to it | 'mount' getting on |
+// 'riding' | 'dismount' getting off. ride.on: you are on it (or halfway on or off).
+const ride = { id: null, st: 'off', on: false, show: false, x: 0, z: 0, y: 0, h: 0, v: 0, k: 0, steer: 0, lean: 0, yaw: 0, crank: 0, cam: 1, run: 0, t: 0, door: [0, 0], doorH: 0, leave: false, off: false, near: false, far: false, back: 0, backRun: 0, uturn: 0, stuckT: 0, best: 0, bestAt: 0, objs: {} };
+// Sizes in metres, not balance: nose = its middle to its front, side = to its flank (the car's are read from its model), hip = how far
+// the hip joints sit above the seat, back = how far the rider leans to the bars, foot = where a foot rests (scooter), step = seconds to get on or off.
+const RIDE_DIM = { bicycle: { nose: 0.75, side: 0.22, hip: 0.085, back: 0.12, step: 0.42 }, scooter: { nose: 0.8, side: 0.3, hip: 0.1, back: 0.1, foot: [0.13, 0.285, 0.16], step: 0.42 }, car: { nose: 2, side: 0.9, step: 0.5 } };
+const _r0 = new THREE.Vector3(), _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _r4 = new THREE.Vector3(), _r5 = new THREE.Vector3(), _r6 = new THREE.Vector3(), _r7 = new THREE.Vector3(), _r8 = new THREE.Vector3(), _r9 = new THREE.Vector3();
+const _rq = new THREE.Quaternion(), _rp = new THREE.Quaternion(), _rf = [new THREE.Quaternion(), new THREE.Quaternion()], X_AXIS = new THREE.Vector3(1, 0, 0);
+// What kind of ground a spot is, from the same measurements locate() uses: 'road' (the carriageway of a main road or a junction),
+// 'pavement' (a main road's sidewalk, kerb and gutter), 'alley' (an inner street, its mouth and its walkways), 'indoors' (your
+// house and its yard), or null (a building or a garden). 'market' will come with the market streets.
+function zoneAt(x, z) {
+  if (homeSpot(x, z)) return 'indoors';
+  const ci = Math.floor(x / PITCH), cj = Math.floor(z / PITCH), lx = x - ci * PITCH, lz = z - cj * PITCH, inZ = lx < RW, inX = lz < RW;
+  if (inZ && inX) return Math.abs(lx - F) <= ROAD_HALF || Math.abs(lz - F) <= ROAD_HALF ? 'road' : 'pavement';   /* a junction: the two carriageways cross, the corners are pavement */
+  if (inZ || inX) { const s = (inZ ? lx : lz) - F, u = Math.abs(s), t = (inZ ? lz : lx) - RW; if (u <= ROAD_HALF) return 'road'; if (u <= F - 0.45) return 'pavement';
+    const bi = inZ ? (s > 0 ? ci : ci - 1) : ci, bj = inZ ? cj : (s > 0 ? cj : cj - 1); return laneDir(bi, bj) === (inZ ? 'x' : 'z') && Math.abs(t - MID) <= LANE_HALF - 0.45 ? 'alley' : 'pavement'; }
+  return Math.abs((laneDir(ci, cj) === 'z' ? lx : lz) - RW - MID) <= LANE_HALF - 0.45 ? 'alley' : null;
+}
+const rideOk = (id, x, z) => !!locate(x, z, F - 0.45) && logic.mayGo(id, zoneAt(x, z), CONFIG);   /* walkable at all, and this ride may be on that kind of ground */
+const RIDE_PROBES = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]; /* both ends, both flanks, the four corners (the middle is tried first) */
+function rideBad(id, x, z, h) { // how many of those places it may NOT be on (99 when its middle is one of them)
+  const D = RIDE_DIM[id], sx = Math.sin(h), sz = Math.cos(h); if (!rideOk(id, x, z)) return 99; let n = 0;
+  for (const [a, l] of RIDE_PROBES) if (!rideOk(id, x + sx * D.nose * a + sz * D.side * l, z + sz * D.nose * a - sx * D.side * l)) n++;
+  return n;
+}
+const rideFits = (id, x, z, h) => rideBad(id, x, z, h) === 0; /* may the whole of it stand here, facing h? */
+function rideObj(id) { // the one bicycle, scooter or car in the world: made once, with paints of its own so it can fade in and out
+  if (ride.objs[id]) return ride.objs[id]; const o = rideModel(id); if (!o) return null;
+  const own = new Map(), mats = [], mine = (src) => { if (!own.has(src)) { const c = src.clone(); own.set(src, c); mats.push({ m: c, tr: src.transparent, op: src.opacity }); if (HQ && src.userData.env !== undefined) CAR_MATS.push(c); } return own.get(src); };
+  o.traverse((m) => { if (m.isMesh) m.material = Array.isArray(m.material) ? m.material.map(mine) : mine(m.material); });
+  const kind = id === 'car' ? carKinds.find((k) => k.name === o.userData.kind) : null, wheels = [], pedals = [];
+  o.traverse((p) => { if (id === 'car' ? p.name === 'wheel' : /^wheel[FR]$/.test(p.name)) wheels.push({ o: p, rad: kind ? kind.rad : p.userData.rad || 0.3, axis: kind ? kind.axleVec : X_AXIS }); if (p.name === 'pedal') pedals.push(p); });
+  if (id === 'car') Object.assign(RIDE_DIM.car, { nose: o.userData.half * 0.94, side: o.userData.halfW * 0.92 });
+  const D = RIDE_DIM[id], patch = new THREE.Mesh(FOOT_SHADE.geometry, FOOT_SHADE.material.clone()); patch.scale.set(D.side * 2 + 0.8, 1, D.nose * 2 + 0.7); patch.position.y = 0.03; patch.renderOrder = 4; o.add(patch); // a soft dark patch where it meets the ground
+  const steer = o.getObjectByName('steer'), crank = o.getObjectByName('crank');
+  o.visible = false; o.rotation.order = 'YXZ'; scene.add(o);
+  return ride.objs[id] = { o, mats, wheels, pedals, patch, vis: 0, steer, axis: steer ? new THREE.Vector3().fromArray(steer.userData.axis) : null, crank, seat: o.getObjectByName('seat'), grips: o.getObjectByName('grips'), hold: o.getObjectByName('basket') || o.getObjectByName('box') };
+}
+function kerbSpot(id, x, z) { // the nearest place at the kerb of a main road, clear of the junctions, facing the way that side of the road drives
+  const D = RIDE_DIM[id], off = ROAD_HALF - D.side - 0.3, ci = Math.floor(x / PITCH), cj = Math.floor(z / PITCH); let best = null;
+  const tryAt = (px, pz, h) => { const d = Math.hypot(px - x, pz - z); if ((!best || d < best.d) && rideFits(id, px, pz, h)) best = { x: px, z: pz, h, d }; };
+  for (let n = 0; n <= 1; n++) for (const s of [-1, 1]) for (let m = -1; m <= 1; m++) {
+    tryAt((ci + n) * PITCH + F + s * off, clamp(z, (cj + m) * PITCH + RW + 4, (cj + m + 1) * PITCH - 4), s < 0 ? 0 : Math.PI);                  /* a road along z: its near side drives towards +z */
+    tryAt(clamp(x, (ci + m) * PITCH + RW + 4, (ci + m + 1) * PITCH - 4), (cj + n) * PITCH + F + s * off, s > 0 ? Math.PI / 2 : -Math.PI / 2);   /* a road along x */
+  }
+  return best;
+}
+function besideSpot(id, x, z, h) { // right beside you (your right hand first), facing the way you face
+  for (const r of [0.8, 1.2, 1.8, 2.6]) for (let a = 0; a < 8; a++) { const ang = h - Math.PI / 2 + a * Math.PI / 4, px = x + Math.sin(ang) * r, pz = z + Math.cos(ang) * r;
+    if (!locate((x + px) / 2, (z + pz) / 2, F - 0.45)) continue; /* (nothing solid in between) */
+    for (const hh of [h, 0, Math.PI / 2, Math.PI, -Math.PI / 2]) if (rideFits(id, px, pz, hh)) return { x: px, z: pz, h: hh, d: r }; }
+  return null;
+}
+function rideSide(nx, nz) { // where you stand to get on, or step to when you get off: beside it. Getting on: the side you are coming from. Getting off: the pavement first
+  const D = RIDE_DIM[ride.id], cx = Math.cos(ride.h), sx = Math.sin(ride.h); let best = null, score = Infinity;
+  for (const s of [-1, 1]) for (const L of [D.side + 0.45, D.side + 1.1, D.side + 1.9]) { const px = ride.x + cx * s * L, pz = ride.z - sx * s * L, q = locate(px, pz, F - 0.45); if (!q || q.room || q.yard || !rideClear(px, pz, ride.x, ride.z)) continue; /* (never a spot in a yard, or with a fence between it and the ride) */
+    const sc = nx === undefined ? (zoneAt(px, pz) === 'road' ? 10 : q.y > 0.1 ? 0 : 3) + L : Math.hypot(px - nx, pz - nz) + (L - D.side) * 0.5 + (rideClear(nx, nz, px, pz) ? 0 : 50); if (sc < score) { score = sc; best = [px, pz]; } }
+  return best || [ride.x, ride.z];
+}
+function rideGap() { // metres from you to the nearest part of it
+  const D = RIDE_DIM[ride.id], s = Math.sin(ride.h), c = Math.cos(ride.h), dx = hero.x - ride.x, dz = hero.z - ride.z;
+  return Math.hypot(Math.max(0, Math.abs(dx * s + dz * c) - D.nose), Math.max(0, Math.abs(dx * c - dz * s) - D.side));
+}
+function rideOn() { // step up to it and get on
+  if (!ride.id || ride.st !== 'parked' || !ride.show || ride.leave) return; const p = rideSide(hero.x, hero.z); ride.door = p; ride.doorH = Math.atan2(ride.x - p[0], ride.z - p[1]); ride.st = 'walk'; ride.t = 0; ride.best = Infinity; ride.bestAt = 0;
+}
+function rideOff() { // get off, on the pavement side when there is one
+  if (ride.st !== 'riding') return; ride.door = rideSide(); ride.doorH = ride.h; ride.st = 'dismount'; ride.v = 0; ride.off = false; ride.t = 0;
+}
+function rideDrop() { if (!ride.on) return; ride.on = false; ride.k = 0; ride.v = 0; ride.st = 'parked'; } // knocked off it: it stays where it is
+function ridePlan(id) { // where it would stand if the errand started now: beside you (a bicycle), or at the nearest kerb. far: too far to be brought to you
+  if (id === 'walk' || !CONFIG.transport[id] || !rideObj(id)) return null;
+  const inside = zoneAt(hero.x, hero.z) === 'indoors', spot = (!inside && id === 'bicycle' && besideSpot(id, hero.x, hero.z, hero.heading)) || kerbSpot(id, hero.x, hero.z); if (!spot) return null;
+  spot.far = inside || spot.d > CONFIG.ride.park; return spot;
+}
+function rideCall(id) { // the countdown has started: your ride is put on the nearest ground it may stand on, and you get on
+  rideDrop(); Object.assign(ride, { id: null, st: 'off', show: false, leave: false, off: false, far: false, v: 0, k: 0, lean: 0, steer: 0, yaw: 0, back: 0, stuckT: 0 });
+  const spot = ridePlan(id); if (!spot) return; /* (on foot, or nowhere for it to stand: this one is on foot) */
+  ride.objs[id].vis = 0; Object.assign(ride, { id, st: 'parked', show: true, far: spot.far, x: spot.x, z: spot.z, h: spot.h, y: locY(spot.x, spot.z) });
+  if (!spot.far) rideOn(); /* further off than that (or you are indoors): you start on foot; the map, the pin and a note lead you to it, and the walk is on the clock */
+}
+function rideLead() { // where the map and the pin lead: to your ride while it stands out of reach and you have not yet got on, then to the errand
+  const o = job.offer; if (!o || (job.state !== 'pickup' && job.state !== 'deliver')) return;
+  if (ride.far && ride.id && ride.st === 'parked' && job.state === 'pickup') { const name = CONFIG.transport[ride.id].name; aim(name, ride.x, ride.z); note('Your ' + name.toLowerCase() + ' is on the main road', 4.5); }
+  else if (job.state === 'pickup') aim('Pickup', o.from.x, o.from.z); else aim('Deliver', o.to.x, o.to.z);
+}
+function rideClear(ax, az, bx, bz) { // can you walk straight from A to B? (no fence, wall or pole base in between)
+  const d = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(d / 0.3)); for (let i = 0; i <= n; i++) { const q = locate(lerp(ax, bx, i / n), lerp(az, bz, i / n), F - 0.45); if (!q || q.room) return false; } return true;
+}
+function rideEnd(hit) { // the errand is over (paid, late or lost): you get off where you are, and it goes
+  if (!ride.id) return; if (hit) rideDrop();
+  if (ride.on) ride.leave = true; else { if (ride.st === 'walk') ride.st = 'parked'; ride.show = false; }
+}
+function rideFade(dt) { // nothing pops into view or out of it: it comes and goes over a moment
+  for (const id in ride.objs) { const R = ride.objs[id], want = ride.id === id && ride.show ? 1 : 0;
+    if (R.vis !== want) { const a = R.vis = clamp(R.vis + (want ? 1 : -1) * dt / CONFIG.ride.fade, 0, 1), solid = a >= 1; R.o.visible = a > 0; R.o.scale.setScalar(0.94 + 0.06 * a);
+      for (const q of R.mats) { const tr = solid ? q.tr : true; if (q.m.transparent !== tr) { q.m.transparent = tr; q.m.needsUpdate = true; } q.m.opacity = q.op * a; } }
+    if (R.vis > 0) R.patch.material.opacity = FOOT_SHADE.material.opacity * R.vis;
+    if (!R.vis && ride.id === id && !ride.show) Object.assign(ride, { id: null, st: 'off', leave: false, off: false }); }
+}
+function rideMove(dt) { // getting on and getting off: he does it by himself. Returns how fast he is walking
+  const D = RIDE_DIM[ride.id]; ride.t += dt;
+  if (ride.st === 'walk') { // to its side, quickly enough to be seated by GO
+    const dx = ride.door[0] - hero.x, dz = ride.door[1] - hero.z, d = Math.hypot(dx, dz), left = job.state === 'count' ? Math.max(0.2, job.count - 1.6) : 0.3;
+    const v = clamp(d / left, logic.footSpeed(false, CONFIG), logic.footSpeed(true, CONFIG)), s = Math.min(d, v * dt), lim = F - 0.45;
+    if (d < ride.best - 0.02) { ride.best = d; ride.bestAt = ride.t; }
+    if (ride.t > 5) { ride.st = 'parked'; return 0; } /* (something is in the way: this errand starts on foot) */
+    if (d > 0.1 && !(d < 1 && ride.t - ride.bestAt > 0.5)) { // he walks there as he walks anywhere: round poles and people, never through a fence (and when a pole stands on the very spot, from as near as he can get)
+      const nx = hero.x + dx / d * s, nz = hero.z + dz / d * s, ox = hero.x, oz = hero.z;
+      if (locate(nx, nz, lim)) { hero.x = nx; hero.z = nz; } else if (locate(nx, hero.z, lim)) hero.x = nx; else if (locate(hero.x, nz, lim)) hero.z = nz;
+      pushOut(); pushOffCars(); if (!locate(hero.x, hero.z, lim)) { hero.x = ox; hero.z = oz; }
+      hero.heading += angDiff(Math.atan2(dx, dz), hero.heading) * Math.min(1, dt * 10); return v; }
+    ride.st = 'mount'; ride.on = true; ride.k = 0; ride.t = 0; ride.door = [hero.x, hero.z]; ride.doorH = hero.heading; return 0;
+  }
+  const up = ride.st === 'mount'; ride.k = clamp(ride.k + (up ? 1 : -1) * dt / D.step, 0, 1); const e = ride.k * ride.k * (3 - 2 * ride.k);
+  hero.x = lerp(ride.door[0], ride.x, e); hero.z = lerp(ride.door[1], ride.z, e); hero.heading = ride.doorH + angDiff(ride.h, ride.doorH) * e;
+  if (up && ride.k >= 1) { ride.st = 'riding'; ride.run = 0; ride.v = 0; ride.back = 0; ride.stuckT = 0; if (ride.far) { ride.far = false; rideLead(); } }
+  if (!up && ride.k <= 0) { ride.st = 'parked'; ride.on = false; if (ride.leave) ride.show = false; }
+  return 0;
+}
+function rideDrive(dt, mx, my, mag, fx, fz) { // the stick says where you want to go; it steers that way at its own turning rate and moves only along its own heading
+  const id = ride.id, T = CONFIG.transport[id], C = CONFIG.ride, D = RIDE_DIM[id], top = logic.rideSpeed(id, CONFIG), turn = logic.rideTurn(id, CONFIG);
+  const stop = ride.leave || ride.off || ride.near || ui.busy || hero.down > 0, pushing = !stop && mag > 0.1, slow = Math.abs(ride.v) < C.stopped * 2; let want = 0, aim = ride.h, diff = 0;
+  if (!pushing) ride.back = 0;
+  else { aim = Math.atan2(fx * my - fz * mx, fz * my + fx * mx); diff = Math.abs(angDiff(aim, ride.h)); const push = Math.min(1, mag / 0.8);
+    // Forwards, always: a stick pointing behind you is a U-turn (it creeps round at full lock). It backs up only when its nose is blocked,
+    // and then only for a moment (the middle of a three-point turn), swinging its nose towards where you want to go.
+    if (ride.back > 0) { ride.back -= dt; if (ride.back <= 0 || ride.backRun >= C.backDist || diff < 0.35) ride.back = 0; }
+    want = logic.rideAim(diff, push, ride.back > 0, id, CONFIG); }
+  ride.v = logic.rideStep(ride.v, want, dt, id, CONFIG, stop && !ride.near ? 2 : 1);
+  const sp = Math.abs(ride.v), rate = Math.max(turn * clamp(sp / (top * 0.3), 0, 1), pushing && slow ? T.pivot || 0 : 0);                            /* no turning on the spot, except a bicycle, slowly */
+  // Which way round? The short way; but for a turn right round (the stick behind you), the side with room: towards the middle of the road, not the kerb. Once chosen it is kept until the turn is nearly made.
+  let round = angDiff(aim, ride.h);
+  if (!pushing || diff < 1.5) ride.uturn = 0;
+  else if (diff > 2.2 && !ride.uturn) { const px = Math.cos(ride.h), pz = -Math.sin(ride.h), room = (sg) => (rideOk(id, ride.x + px * sg * 2, ride.z + pz * sg * 2) ? 1 : 0) + (rideOk(id, ride.x + px * sg * 4, ride.z + pz * sg * 4) ? 1 : 0), a = room(1), b = room(-1);
+    ride.uturn = a > b ? 1 : b > a ? -1 : Math.sign(round) || 1; }
+  if (ride.uturn) round = ride.uturn * diff;
+  const dh = clamp(round, -rate * dt, rate * dt), h1 = ride.h + dh, d = ride.v * dt, dir = ride.v < 0 ? -1 : 1, ox = ride.x, oz = ride.z, sx = Math.sin(h1) * d, sz = Math.cos(h1) * d;
+  // A move is good when every part of it (middle, ends, flanks, corners) stays on ground it may use. (Should it ever be found hanging over an edge, any move that does not hang further is good, so it can never be shut in.)
+  const now = rideBad(id, ox, oz, ride.h), free = (x, z, h) => { const b = rideBad(id, x, z, h); return b === 0 || (now > 0 && b <= now); }; let yaw = dh, jam = false;
+  const swing = (h2) => { // turn to face h2 where it stands; when a corner would then hang over the edge, it shuffles a hand's width clear of it
+    if (free(ride.x, ride.z, h2)) { ride.h = h2; return true; }
+    for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (free(ride.x + ax * 0.05, ride.z + az * 0.05, h2)) { ride.x += ax * 0.05; ride.z += az * 0.05; ride.h = h2; return true; }
+    return false; };
+  if (!d) { if (!dh || !swing(h1)) yaw = 0; }
+  else if (free(ox + sx, oz + sz, h1)) { ride.x += sx; ride.z += sz; ride.h = h1; }                                                                  /* free to go */
+  else if (free(ox + sx, oz + sz, ride.h)) { ride.x += sx; ride.z += sz; yaw = 0; }
+  else { // somewhere it may not go: slide along the edge, swinging round to follow it, as walking slides along a wall
+    const slide = (ax, az) => { if (Math.abs(ax) + Math.abs(az) < 1e-6 || !free(ox + ax, oz + az, ride.h)) return false;
+      const lim = T.pivot > 0 ? C.unstick * 2 : turn * clamp(Math.hypot(ax, az) / Math.max(1e-4, dt) / (top * 0.3), 0, 1);                           /* (a scooter or car swings round only as fast as it is really moving: never on the spot) */
+      ride.x += ax; ride.z += az; yaw = clamp(angDiff(Math.atan2(ax * dir, az * dir), ride.h), -lim * dt, lim * dt); if (!swing(ride.h + yaw)) yaw = 0; return true; };
+    if (!slide(sx, 0) && !slide(0, sz)) { jam = true; yaw = 0;
+      if (pushing && !(T.reverse > 0)) { yaw = clamp(angDiff(aim, ride.h), -C.unstick * dt, C.unstick * dt); if (!swing(ride.h + yaw)) yaw = 0; } }             /* jammed against the edge: a bicycle is worked round by hand (a scooter or car backs off: below) */
+    else if (Math.hypot(ride.x - ox, ride.z - oz) < Math.abs(d) * 0.3 || (diff > 1 && dir > 0)) jam = true;                                                 /* nose-on to the edge (sliding gets it nowhere), or the edge is stopping a turn it wants to make */                                                                          /* nose-on to the edge: sliding gets it nowhere */
+  }
+  ride.h = Math.atan2(Math.sin(ride.h), Math.cos(ride.h));
+  hero.x = ride.x; hero.z = ride.z; pushOut(); pushOffCars(D.side + 0.15, D.nose + 0.15);                                                            /* trees, poles, people and cars are as solid as they are on foot: always */
+  if (hero.x !== ride.x || hero.z !== ride.z) { if (free(hero.x, hero.z, ride.h)) { ride.x = hero.x; ride.z = hero.z; } else { ride.x = ox; ride.z = oz; } }
+  hero.x = ride.x; hero.z = ride.z; hero.heading = ride.h; const gone = Math.hypot(ride.x - ox, ride.z - oz); ride.run += gone; if (ride.v < 0) ride.backRun += gone;
+  // Its speed is what it really did this frame: held behind a queue, or against a kerb, the wheels stop and the engine drops.
+  if (dt > 0) { const net = ((ride.x - ox) * Math.sin(ride.h) + (ride.z - oz) * Math.cos(ride.h)) / dt; if (jam || Math.abs(net) < Math.abs(ride.v) * 0.6) ride.v = clamp(net, Math.min(0, ride.v), Math.max(0, ride.v)); }
+  if (jam && pushing && T.reverse > 0) { if (dir < 0) ride.back = 0; else if (diff > 0.4 && !(ride.back > 0)) { ride.back = C.backTime; ride.backRun = 0; } }   /* nose against the kerb and you want to go elsewhere: back off a little, then round */
+  ride.stuckT = pushing && !jam && gone < 0.15 * dt ? ride.stuckT + dt : 0;                                                                           /* (held by something other than the edge of the road) */
+  if (ride.stuckT > C.stuck) { // No progress for a while. Behind a queue (a red light, say) you simply wait: traffic is never passed through. Only when the car holding you is itself
+    // waiting for YOU (each in the other's way) is it undone: the ride is eased sideways onto free road, a step at a time, or failing that worked round by hand.
+    const c = carTouch(D.side + 0.25, D.nose + 0.25); ride.stuckT = 0;
+    if (c && c.see > 0) { ride.stuckT = C.stuck - 0.12; const px = Math.cos(ride.h), pz = -Math.sin(ride.h); let done = false;
+      for (const sg of [ride.uturn || 1, -(ride.uturn || 1)]) { const nx = ride.x + px * sg * 0.3, nz = ride.z + pz * sg * 0.3; if (done || !rideFits(id, nx, nz, ride.h)) continue;
+        hero.x = nx; hero.z = nz; if (carTouch(D.side + 0.1, D.nose + 0.1)) continue; ride.x = nx; ride.z = nz; done = true; }
+      hero.x = ride.x; hero.z = ride.z; if (!done) swing(ride.h + clamp(angDiff(aim, ride.h), -C.unstick * 0.12, C.unstick * 0.12)); } }
+  ride.yaw += ((dt > 0 ? yaw / dt : 0) - ride.yaw) * Math.min(1, dt * 6);                                                                             /* how fast it is really turning: the lean and the handlebars follow that */
+  ride.lean += (clamp(-ride.yaw * ride.v * 0.055, -0.3, 0.3) - ride.lean) * Math.min(1, dt * 6);
+  ride.steer += (clamp(pushing ? angDiff(aim, ride.h) * 0.7 : 0, -0.5, 0.5) * (ride.v < 0 ? -1 : 1) - ride.steer) * Math.min(1, dt * 8);
+  if (look.id === null && ride.v > 0.5) camYaw += angDiff(ride.h, camYaw) * Math.min(1, dt * 1.3);                                                    /* the camera swings round behind you */
+  if ((ride.off || ride.leave) && sp < C.stopped) rideOff();
+}
+function ridePlace(dt) { // where it stands this frame: wheels turning, handlebars and cranks moving, leaning into the bend
+  rideFade(dt); const R = ride.id && ride.objs[ride.id]; if (!R) return;
+  if (ride.on) ride.y = hero.y; else { ride.lean += -ride.lean * Math.min(1, dt * 6); ride.steer += -ride.steer * Math.min(1, dt * 6); }
+  R.o.position.set(ride.x, ride.y, ride.z); R.o.rotation.set(0, ride.h, ride.id === 'car' ? 0 : ride.lean);
+  const roll = ride.st === 'riding' ? ride.v * dt : 0; for (const w of R.wheels) w.o.rotateOnAxis(w.axis, roll / w.rad);
+  if (R.steer) R.steer.quaternion.setFromAxisAngle(R.axis, ride.steer);
+  if (R.crank) { ride.crank += roll / (R.wheels[0].rad * 2.4); R.crank.rotation.x = ride.crank; for (const p of R.pedals) p.rotation.x = -ride.crank; } /* the pedals stay level as the cranks go round */
+}
+function ridePush() { // on foot: the one you left standing is solid
+  if (!ride.id || !ride.show || ride.on || ride.st !== 'parked') return;
+  const D = RIDE_DIM[ride.id], s = Math.sin(ride.h), c = Math.cos(ride.h), dx = hero.x - ride.x, dz = hero.z - ride.z, a = dx * s + dz * c, l = dx * c - dz * s, pa = D.nose + 0.3 - Math.abs(a), pl = D.side + 0.3 - Math.abs(l);
+  if (pa <= 0 || pl <= 0) return; const da = pa < pl ? Math.sign(a || 1) * pa : 0, dl = pa < pl ? 0 : Math.sign(l || 1) * pl; hero.x += da * s + dl * c; hero.z += da * c - dl * s;
+}
+function rideAct() { // the yellow button: Get off while you ride, Ride when you stand by it
+  if (!ride.id || !ride.show || ride.leave || (job.state !== 'pickup' && job.state !== 'deliver') || job.bend > 0) return null;
+  if (ride.st === 'riding') return { label: 'Get off', run: () => { ride.off = true; } };       /* it brakes, then you step off */
+  if (ride.st === 'parked' && rideGap() < CONFIG.ride.reach) { const p = rideSide(hero.x, hero.z); if (rideClear(hero.x, hero.z, p[0], p[1]) && rideClear(p[0], p[1], ride.x, ride.z)) return { label: 'Ride', run: rideOn }; } /* (a clear walk to its side and from there onto it: never through a fence) */
+  return null;
+}
+const _blk = [{ on: true, x: 0, z: 0, len: 0, wid: 0 }, { on: false, x: 0, z: 0, len: 0, wid: 0 }];
+function roadBlocks() { // what the traffic must stop for: you (as long and wide as what you ride), and what you left standing
+  const D = ride.id ? RIDE_DIM[ride.id] : null, me = _blk[0], it = _blk[1], on = !!(D && ride.on);
+  me.x = hero.x; me.z = hero.z; me.len = on ? D.nose : 0; me.wid = on ? Math.max(0, D.side - 0.3) : 0;
+  it.on = !!(D && ride.show && !ride.on); if (it.on) { it.x = ride.x; it.z = ride.z; it.len = D.nose; it.wid = D.side; }
+  return _blk;
+}
+function ridePose() { // seated: hips on the seat, feet on the pedals or the footboard, hands on the grips, worked out on whichever skeleton the character has
+  const R = ride.on && ride.id !== 'car' ? ride.objs[ride.id] : null, rig = R && rigOf(); if (!R || !(ride.k > 0) || rig.thighs.length < 2) return;
+  const w = ride.k * ride.k * (3 - 2 * ride.k), D = RIDE_DIM[ride.id], o = R.o, kidOf = (list, up) => list.find((b) => { for (let q = b.parent; q; q = q.parent) if (q === up) return true; return false; });
+  o.updateMatrixWorld(true); hero.obj.updateMatrixWorld(true);
+  for (let i = 0; i < Math.min(2, rig.feet.length); i++) rig.feet[i].getWorldQuaternion(_rf[i]);                          /* the feet stay as level as they stand */
+  const ankle = rig.feet[0] ? clamp(rig.feet[0].getWorldPosition(_r0).y - hero.obj.position.y, 0.05, 0.16) : 0.09;       /* how high the ankle is above the sole */
+  rig.thighs[0].getWorldPosition(_r0); rig.thighs[1].getWorldPosition(_r1); _r0.add(_r1).multiplyScalar(0.5); R.seat.getWorldPosition(_r1); _r1.y += D.hip;
+  _r1.sub(_r0).multiplyScalar(w).applyQuaternion(hero.obj.getWorldQuaternion(_rq).invert()); hero.model.position.add(_r1); hero.model.updateMatrixWorld(true); /* the hips come to the seat */
+  _ax.set(Math.cos(hero.heading), 0, -Math.sin(hero.heading)); for (const b of rig.spine) turnBone(b, D.back * w / Math.max(1, rig.spine.length));            /* the back leans to the bars */
+  hero.model.updateMatrixWorld(true);
+  const fwd = _r7.set(0, 0, 1).applyQuaternion(o.quaternion), side = _r8.set(1, 0, 0).applyQuaternion(o.quaternion), pole = _r9;
+  const reach = (b1, b2, b3, target) => { // two bones reach for a point, bending towards the pole
+    b1.getWorldPosition(_r0); b2.getWorldPosition(_r1); b3.getWorldPosition(_r2); const l1 = _r0.distanceTo(_r1), l2 = _r1.distanceTo(_r2);
+    _r3.copy(target).sub(_r0); const d = Math.max(0.05, Math.min(_r3.length(), (l1 + l2) * 0.998)), a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), hh = Math.sqrt(Math.max(0, l1 * l1 - a * a)); _r3.normalize();
+    _r4.copy(pole).addScaledVector(_r3, -pole.dot(_r3)).normalize(); _r5.copy(_r0).addScaledVector(_r3, d);                /* (the point, brought within reach) */
+    _r4.multiplyScalar(hh).addScaledVector(_r3, a).normalize(); aimBone(b1, b2, _r4, w);                                  /* upper bone: towards where the knee or elbow must be */
+    b2.getWorldPosition(_r1); aimBone(b2, b3, _r5.sub(_r1).normalize(), w);                                                /* lower bone: on to the point */
+  };
+  for (const th of rig.thighs) { const sh = kidOf(rig.shins, th), ft = sh && kidOf(rig.feet, sh); if (!ft) continue;
+    const sx = Math.sign(o.worldToLocal(th.getWorldPosition(_r6)).x) || 1;
+    if (R.crank) { const c = R.crank.userData, a = ride.crank + c.a0 + (sx > 0 ? 0 : Math.PI); _r6.set(sx * c.x, R.crank.position.y + c.r * Math.cos(a) + 0.011 + ankle, R.crank.position.z + c.r * Math.sin(a) - 0.07); } /* on its pedal, wherever that has got to */
+    else _r6.set(sx * D.foot[0], D.foot[1] + ankle, D.foot[2]);
+    o.localToWorld(_r6); pole.copy(fwd).addScaledVector(side, sx * 0.14).setY(0.2); reach(th, sh, ft, _r6);
+    const n = rig.feet.indexOf(ft); if (n >= 0 && n < 2) { ft.parent.getWorldQuaternion(_rp); ft.quaternion.slerp(_rp.invert().multiply(_rf[n]), w); ft.updateMatrixWorld(true); } }
+  if (R.grips) for (const up of rig.arms) { const fo = kidOf(rig.fore, up), hd = fo && kidOf(rig.hands, fo); if (!hd) continue;
+    const sx = Math.sign(o.worldToLocal(up.getWorldPosition(_r6)).x) || 1;
+    R.grips.localToWorld(_r6.set(sx * (R.grips.userData.half - 0.03), 0.04, -0.045)); pole.copy(fwd).multiplyScalar(-0.35).addScaledVector(side, sx * 0.5).setY(-1); reach(up, fo, hd, _r6); }
+}
+function rideCarry() { // the parcel rides in the basket, in the box on the back, or on the seat beside you
+  const R = ride.on && ride.k > 0.5 ? ride.objs[ride.id] : null; if (!R || !parcel.visible || job.state !== 'deliver') return;
+  if (R.hold) { R.hold.getWorldPosition(parcel.position); parcel.position.y += 0.02; parcel.scale.setScalar(ride.id === 'bicycle' ? 0.84 : 0.78); } else { parcel.position.set(ride.x, ride.y + 0.45, ride.z); parcel.scale.setScalar(0.7); }
+  parcel.rotation.set(0, ride.h, 0);
 }
 // The small map, top right: the streets round you, turned the way you are facing, and a green house that shows where home is.
 const mapEl = $('map'), mapG = mapEl.getContext('2d'); let mapT = 0, mapNote = '';
@@ -4223,6 +4520,9 @@ function showMap(dt, indoors) {
     g.save(); g.translate(c + px, c + py); g.scale(u, u); g.shadowColor = tone[2]; g.shadowBlur = 16; g.fillStyle = tone[3]; g.beginPath(); g.arc(0, 0, 16, 0, 7); g.fill(); g.shadowBlur = 0; g.strokeStyle = '#fff'; g.lineWidth = 3; g.stroke();
     g.fillStyle = going ? '#17230a' : '#fff'; g.beginPath(); if (going) { g.arc(0, 0, 6, 0, 7); g.fill(); g.restore(); } else { g.moveTo(0, -9.5); g.lineTo(9.5, -1); g.lineTo(6.5, -1); g.lineTo(6.5, 7.5); g.lineTo(-6.5, 7.5); g.lineTo(-6.5, -1); g.lineTo(-9.5, -1); g.closePath(); g.fill(); g.restore(); }
   }
+  if (ride.id && ride.show && !ride.on) { // what you ride, where you left it: a lime dot in a dark ring, held at the rim when it is off the map
+    let dx = ride.x - hero.x, dz = ride.z - hero.z, px = (-cs * dx + sn * dz) * k, py = (-sn * dx - cs * dz) * k; const far = Math.hypot(px, py), lim = c - 12 * u; if (far > lim) { px *= lim / far; py *= lim / far; }
+    g.save(); g.translate(c + px, c + py); g.scale(u, u); g.shadowColor = 'rgba(182,240,44,.9)'; g.shadowBlur = 10; g.fillStyle = '#b6f02c'; g.strokeStyle = '#10161d'; g.lineWidth = 4; g.beginPath(); g.arc(0, 0, 9, 0, 7); g.fill(); g.shadowBlur = 0; g.stroke(); g.restore(); }
   const turn = angDiff(hero.heading, camYaw); g.save(); g.translate(c, c); g.scale(u, u); g.fillStyle = 'rgba(182,240,44,.24)'; g.beginPath(); g.arc(0, 0, 24, 0, 7); g.fill(); // you: a lime arrow in a soft ring
   g.rotate(-turn); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 6; g.fillStyle = '#b6f02c'; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.moveTo(0, -14); g.lineTo(10, 11); g.lineTo(0, 5.5); g.lineTo(-10, 11); g.closePath(); g.fill(); g.shadowBlur = 0; g.stroke(); g.restore();
   const note = performance.now() < (ui.arrived || 0) ? 'You have arrived: ' + ui.arrivedAt : !home ? '' : toRent && away <= 14 ? 'Houses for rent here' : !going && away <= 14 ? 'You are home' : (going ? going.name : toRent ? 'For rent' : 'Home') + ' · ' + (away < 1000 ? Math.round(away / 5) * 5 + ' m' : (away / 1000).toFixed(1) + ' km');
@@ -4331,7 +4631,7 @@ function updateJourney(dt) {
   if (hm && lit && lit.rect) { const r = lit.rect; _v.set(hm.s * (F + hm.sb + 0.22 + clamp((r.z0 + r.z1) / 2, hero_hz(hm) - 2.5, hero_hz(hm) + 2.5)), lit.y / HS + 2.45, clamp((r.x0 + r.x1) / 2, hero_hx(hm) - 2.5, hero_hx(hm) + 2.5)).applyMatrix4(hm.world); homeLight.position.lerp(_v, homeLight.intensity < 1 ? 1 : Math.min(1, dt * 6)); } // the light of whichever room you are standing in
   homeLight.intensity += ((inRoom && !(hm && hm.dark) ? 26 : 0) - homeLight.intensity) * Math.min(1, dt * 3);
   errandTick(dt); hzTick(dt);
-  updateShower(dt); updateDoing(dt); setAct(ui.busy ? null : act); showMoney(); showNear(dt); showLife(dt); showMap(dt, inRoom);
+  updateShower(dt); updateDoing(dt); setAct(ui.busy ? null : act || rideAct()); showMoney(); showNear(dt); showLife(dt); showMap(dt, inRoom);
   const mine = RENT[game.home]; homePin.visible = !!(mine && mine.g.parent && !inRoom); if (homePin.visible) homePin.position.set(mine.cx, 11.6, mine.cz); // it stays still over your house
 }
 
@@ -4350,9 +4650,11 @@ function frame() {
   let my = ui.busy ? 0 : joy.y + (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
   const mag = Math.min(1, Math.hypot(mx, my)), fx = Math.sin(camYaw), fz = Math.cos(camYaw);
   let speed = 0;
-  if (mag > 0.1) {
+  if (ride.st === 'walk' || ride.st === 'mount' || ride.st === 'dismount') speed = rideMove(dt);   /* getting on or off: he does that by himself */
+  else if (ride.st === 'riding') rideDrive(dt, mx, my, mag, fx, fz);
+  else if (mag > 0.1) {
     const run = !game.hurt && mag > 0.85 && (joy.id !== null || keys.ShiftLeft || keys.ShiftRight); // stick pushed right to the edge: run (on a keyboard, hold Shift)
-    speed = run ? 5.2 : 1.75 * Math.min(1, mag / 0.8);
+    speed = run ? logic.footSpeed(true, CONFIG) : logic.footSpeed(false, CONFIG) * Math.min(1, mag / 0.8);
     let dx = fx * my - fz * mx, dz = fz * my + fx * mx; const dl = Math.hypot(dx, dz); dx /= dl; dz /= dl;
     hero.heading += angDiff(Math.atan2(dx, dz), hero.heading) * Math.min(1, dt * 9);
     const nx = hero.x + dx * speed * dt, nz = hero.z + dz * speed * dt, lim = F - 0.45, ox = hero.x, oz = hero.z;
@@ -4360,7 +4662,7 @@ function frame() {
     else if (locate(nx, hero.z, lim)) hero.x = nx;                    // slide along a wall
     else if (locate(hero.x, nz, lim)) hero.z = nz;
     else speed = 0;
-    pushOut(); pushOffCars(); homePush();                                         // step round trees, poles, stalls, people and cars
+    pushOut(); pushOffCars(); ridePush(); homePush();                             // step round trees, poles, stalls, people and cars
     if (!locate(hero.x, hero.z, lim)) { hero.x = ox; hero.z = oz; speed = 0; }
     if (look.id === null) camYaw += angDiff(hero.heading, camYaw) * Math.min(1, dt * 1.3); // camera swings round behind you
   }
@@ -4369,19 +4671,24 @@ function frame() {
   hero.level = here && here.level !== undefined ? here.level : 0; // which floor of a house you are on (0 anywhere else)
   if (here) { hero.y += (here.y - hero.y) * Math.min(1, dt * 12); }
   hero.obj.position.set(hero.x, hero.y, hero.z); hero.obj.rotation.y = hero.heading;
+  { const inCar = ride.on && ride.id === 'car', e = ride.k * ride.k * (3 - 2 * ride.k); hero.obj.rotation.z = ride.on && !inCar ? ride.lean * e : 0; /* on two wheels he leans with it */
+    hero.obj.visible = !(inCar && ride.k > 0.8); if (inCar) hero.obj.position.y -= 0.5 * e; }                                                     /* into the car: a step to the door, down into the seat, and he is inside */
+  ridePlace(dt);
   if (hero.mixer) { // blend idle, walk and run by speed
-    const v = hero.speed, goal = [v < 0.15 ? 1 : 0, v >= 0.15 && v < 2.5 ? 1 : 0, v >= 2.5 ? 1 : 0];
+    const v = hero.speed, goal = [v < 0.15 ? 1 : 0, v >= 0.15 && v < RUN_AT ? 1 : 0, v >= RUN_AT ? 1 : 0];
     for (let i = 0; i < 3; i++) { hero.w[i] += (goal[i] - hero.w[i]) * Math.min(1, dt * 7); hero.acts[i].setEffectiveWeight(hero.w[i]); }
-    hero.acts[1].timeScale = clamp(v / hero.stride, 0.5, 1.5); hero.acts[2].timeScale = clamp(v / 5.2, 0.75, 1.15);
+    hero.acts[1].timeScale = clamp(v / hero.stride, 0.5, 1.5); hero.acts[2].timeScale = clamp(v / (hero.runPace || RUN_CLIP), 0.6, 1.3);
     hero.mixer.update(dt);
+    hero.model.position.x = hero.baseX || 0; hero.model.position.z = hero.baseZ || 0;
     if (hero.lifts) hero.model.position.y = hero.baseY + (hero.w[0] * hero.lifts[0] + hero.w[1] * hero.lifts[1] + hero.w[2] * hero.lifts[2]) / Math.max(0.001, hero.w[0] + hero.w[1] + hero.w[2]);
-    errandPose(dt);
+    errandPose(dt); ridePose(); rideCarry();
   }
   downTick(dt);
 
   // camera follows from behind and above; it pulls in rather than pass through a building
   const cfx = Math.sin(camYaw), cfz = Math.cos(camYaw), cp = Math.cos(camPitch), sp = Math.sin(camPitch);
-  for (const d of [5.4, 4.2, 3.2, 2.4, 1.6, 1.0, 0.55]) {
+  ride.cam += ((ride.on ? CONFIG.transport[ride.id].cam : 1) - ride.cam) * Math.min(1, dt * 2.5); /* further back on a scooter, further still in the car, so all of it is in view */
+  for (const d0 of [5.4, 4.2, 3.2, 2.4, 1.6, 1.0, 0.55]) { const d = d0 * ride.cam;
     camGoal.set(hero.x - cfx * d * cp, hero.y + 1.7 + d * sp, hero.z - cfz * d * cp); // low enough to stay under shop awnings
     const spot = locate(camGoal.x, camGoal.z, F - 0.15, 0.6);
     if (spot && (!!spot.room === !!(here && here.room) || spot.door || (here && here.door))) { if (spot.over) camGoal.y += 1.8; break; } // over a front yard: rise clear of the fence. Indoors the camera stays indoors, so a wall never comes between it and you
@@ -4407,5 +4714,10 @@ function frame() {
   errandOverHead();
 }
 function loop() { frame(); requestAnimationFrame(loop); }
-if (location.hash.includes('dbg')) window.__dbg = { logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, rideModel, rideTris, makeRideArt, RIDE_PIC, RIDE_TPL, openPicker, pickAsk, pickBuy, pickStart, moneyCount, save, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, step: (dt) => updatePeople(dt, camera.position), look: (y) => { camYaw = y; hero.heading = y; } }; // testing only
+if (location.hash.includes('dbg')) window.__dbg = { logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, rideModel, rideTris, makeRideArt, RIDE_PIC, RIDE_TPL, openPicker, pickAsk, pickBuy, pickStart, moneyCount, save, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, ride, RIDE_DIM, zoneAt, rideFits, rideBad, ridePlan, rideLead, stancePace, rideClear, STREETS, RUN_AT, cam: (y) => { camYaw = y; }, rideObj, rideCall, rideOn, rideOff, rideEnd, kerbSpot, makeOffers, endErrand, closeErrand, becomeHero, joy, keys, parcel, HEROES, get camYaw() { return camYaw; },
+  quickRun: (id = 'walk') => { /* testing: own this ride (bought the proper way, with money given for it), skip the cards and begin the countdown */
+    if ((job.state !== 'idle' && job.state !== 'offer') || !CONFIG.transport[id]) return false; closeErrand(); job.offers = makeOffers(); if (!job.offers || !job.offers[id]) return false;
+    job.offer = job.offers[id]; job.state = 'offer'; ui.busy = true; job.pick = RIDES.indexOf(id); errandEl.hidden = false; bendErrand();
+    if (rideOpt(id).act !== 'start') { game.money = logic.earn(game.money, CONFIG.transport[id].price); job.ask = id; job.askAt = -1e9; pickBuy(id); }
+    job.boughtAt = -1e9; pickStart(id); return job.state === 'count'; }, step: (dt) => updatePeople(dt, camera.position), look: (y) => { camYaw = y; hero.heading = y; } }; // testing only
 requestAnimationFrame(loop);
