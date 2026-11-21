@@ -1,0 +1,16 @@
+All images in this folder come from Poly Haven (https://polyhaven.com) and are CC0 (public domain).
+They were resized, and the three "detail" images were turned into mid-grey versions, to keep the game small.
+
+sky.jpg         Kloofendal 48d Partly Cloudy (Pure Sky)   upper half, 4096 x 1024
+brick_red.jpg   Large Red Bricks
+brick_dark.jpg  Brick Wall 001
+brick_tan.jpg   Brick Wall 003
+stone.jpg       Concrete Brick Wall 001
+plaster.jpg     Grey Plaster         (detail, multiplied over painted walls)
+asphalt.jpg     Asphalt 01           (detail, multiplied over the road)
+paving.jpg      Concrete Pavement    (detail, multiplied over the sidewalks)
+
+Indoors (also Poly Haven, CC0):
+floor_wood.jpg  Laminate Floor 02
+wall_paint.jpg  Beige Wall 001       (lightened to an off-white paint)
+rug_wool.jpg    Poly Wool Herringbone

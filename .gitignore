@@ -30,7 +30,6 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
 /coverage/
 
 # Symbolication related
@@ -49,5 +48,8 @@ app.*.map.json
 
 # Street build leftovers
 street_src/node_modules/
-/build/
+/build/*
+!/build/vehicles_src/
+# the bundled game is rebuilt by rebuild_preview.sh (it is too large to keep in history)
+/assets/street/index.html
 street_src/models/fusegirl.glb

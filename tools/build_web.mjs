@@ -1,0 +1,62 @@
+// Builds the version of the game that goes online (build/web/), for phones and computers:
+//   index.html  - picks the right version for the device
+//   full.html   - the computer version, exactly what the preview shows
+//   m.html + m.js + m/*.glb - the phone version: models with smaller pictures (tools/shrink_glb.py),
+//                 downloaded as separate files instead of being written into the page, so a phone's memory is not filled twice.
+// usage: node tools/build_web.mjs   (after sh build_street.sh and python3 tools/shrink_glb.py street_src/models build/mobile_src/models)
+import { build } from '../street_src/node_modules/esbuild/lib/main.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const out = path.join(root, 'build/web'), small = path.join(root, 'build/mobile_src/models');
+fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(path.join(out, 'm'), { recursive: true });
+
+const names = new Set();
+const glbFromFiles = {
+  name: 'glb-from-files',
+  setup(b) {
+    b.onLoad({ filter: /\.glb$/ }, (a) => {
+      const n = path.basename(a.path); names.add(n);
+      if (!fs.existsSync(path.join(small, n))) throw new Error('no phone copy of ' + n);
+      return { contents: `export default globalThis.__GLB[${JSON.stringify(n)}];`, loader: 'js' };
+    });
+  },
+};
+await build({
+  entryPoints: [path.join(root, 'street_src/main.js')], bundle: true, minify: true, format: 'iife', target: ['es2020', 'safari15'],
+  loader: { '.jpg': 'binary' }, plugins: [glbFromFiles], outfile: path.join(out, 'm.js'), logLevel: 'warning',
+});
+fs.mkdirSync(path.join(out, 'd'), { recursive: true });
+for (const n of names) { fs.copyFileSync(path.join(small, n), path.join(out, 'm', n)); fs.copyFileSync(path.join(root, 'street_src/models', n), path.join(out, 'd', n)); } // d/: the computer's full-detail models
+
+// Both pages share one game script; the phone page fetches the small models (m/), the computer page the full ones (d/).
+// Each page downloads every model first (showing how far along it is), then starts the game.
+const list = JSON.stringify([...names]);
+const loader = (dir) => `(async () => {
+  const L = ${list}, G = globalThis.__GLB = {}; let done = 0;
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;inset:0;z-index:99;display:grid;place-items:center;background:#0d1219;color:#fff;font:600 15px -apple-system,system-ui,sans-serif';
+  document.body.appendChild(bar); const show = () => { bar.textContent = 'Loading the street… ' + Math.round(done / L.length * 100) + '%'; }; show();
+  const get = async (n, tries = 3) => { try { const r = await fetch('${dir}/' + n); if (!r.ok) throw new Error(r.status); return new Uint8Array(await r.arrayBuffer()); } catch (e) { if (tries > 1) return get(n, tries - 1); throw e; } };
+  let next = 0; const worker = async () => { while (next < L.length) { const n = L[next++]; G[n] = await get(n); done++; show(); } };
+  try { await Promise.all(Array.from({ length: 6 }, worker)); } catch (e) { bar.textContent = 'Could not load the street. Check your connection and reload.'; return; }
+  const s = document.createElement('script'); s.src = 'm.js'; s.onload = () => bar.remove(); document.body.appendChild(s);
+})();`;
+const page = fs.readFileSync(path.join(root, 'street_src/index.html'), 'utf8');
+if (!page.includes('/*BUNDLE*/')) throw new Error('no /*BUNDLE*/ in index.html');
+fs.writeFileSync(path.join(out, 'm.html'), page.replace('/*BUNDLE*/', loader('m')));
+fs.writeFileSync(path.join(out, 'full.html'), page.replace('/*BUNDLE*/', loader('d')));
+fs.writeFileSync(path.join(out, 'index.html'), `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Blocktown</title><meta name="apple-mobile-web-app-title" content="Blocktown"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png"><style>html{background:#0d1219}</style>
+<script>var phone = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || location.hash.includes('phone');
+location.replace((phone && !location.hash.includes('full') ? 'm.html' : 'full.html') + location.hash);</script>`);
+// Full screen when added to a phone's home screen: the app settings file and its icons.
+for (const f of ['icon-180.png', 'icon-192.png', 'icon-512.png']) fs.copyFileSync(path.join(root, 'street_src/web', f), path.join(out, f));
+fs.writeFileSync(path.join(out, 'manifest.webmanifest'), JSON.stringify({ name: 'Blocktown', short_name: 'Blocktown', start_url: './', scope: './', display: 'fullscreen', orientation: 'any', background_color: '#0d1219', theme_color: '#86a9d6',
+  icons: [{ src: 'icon-192.png', sizes: '192x192', type: 'image/png' }, { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] }, null, 1));
+fs.writeFileSync(path.join(out, 'netlify.toml'), '[build]\n  publish = "."\n  command = ""\n');
+const mb = (f) => (fs.statSync(f).size / 1e6).toFixed(1);
+let models = 0; for (const n of names) models += fs.statSync(path.join(out, 'm', n)).size;
+let big = 0; for (const n of names) big = Math.max(big, fs.statSync(path.join(out, 'd', n)).size);
+console.log(`build/web ready: m.js ${mb(path.join(out, 'm.js'))} MB + ${names.size} models ${(models / 1e6).toFixed(1)} MB; largest file ${(big / 1e6).toFixed(1)} MB`);

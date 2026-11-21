@@ -35,8 +35,104 @@ Changes to all: textures reduced, extra texture maps removed; skin tones varied 
   sophia.glb    "Sophia Animated 003 - Animated 3D Woman" by Renderpeople  https://sketchfab.com/3d-models/sophia-animated-003-animated-3d-woman-dc448c3be0e74f96a55fb475a13433cf
   eric.glb      "Eric Rigged 001 - Rigged 3D Business Man" by Renderpeople  https://sketchfab.com/3d-models/eric-rigged-001-rigged-3d-business-man-a46bc9f67aaa415bb4f3241eef900e7f
   carla.glb     "Carla Rigged 001 - Rigged 3D Business Women" by Renderpeople  https://sketchfab.com/3d-models/carla-rigged-001-rigged-3d-business-women-acf520f450d14dd799f98a6fede3edf5
-  guard.glb     "Security Guard - Rigged 3D Model" by Q.SARDOR  https://sketchfab.com/3d-models/security-guard-rigged-3d-model-1e3307732bbf4453b30f021bfec5bcaf
+  cop1.glb (was guard.glb) "Security Guard - Rigged 3D Model" by Q.SARDOR  https://sketchfab.com/3d-models/security-guard-rigged-3d-model-1e3307732bbf4453b30f021bfec5bcaf
   bizman.glb    "Business Man" by Q.SARDOR  https://sketchfab.com/3d-models/business-man-71abfba65139471dabac10ffeb5bf2bb
   claudia.glb   "Claudia Rigged 002 - 3D Rigged Business Women" by Renderpeople  https://sketchfab.com/3d-models/claudia-rigged-002-3d-rigged-business-women-c659bd0accab47c6bbe390cf822a2b92
   mixamo_anims.glb  walk and idle animations from Xbot.glb (Adobe Mixamo), as distributed with the three.js examples (r187)
 No longer used: the Quaternius walkers and "Bearded man - Low poly animated".
+
+
+Backpacks the player can choose (all from Sketchfab, CC Attribution 4.0; each was reduced in detail and its texture shrunk for the game):
+  pack_hike.glb    "cute hiking backpack" by pighunt3r15   https://sketchfab.com/3d-models/9f287c461ecd4bb2b6cf17ad7934afe2
+  pack_travel.glb  "Travel backpack" by Jungle Jim         https://sketchfab.com/3d-models/92710c2545c04079a85f01c68b905ea8
+  pack_blue.glb    "Blue travel backpack" by Jungle Jim    https://sketchfab.com/3d-models/93d021a18b454ad5af2dc3e2e23e3965
+  pack_yellow.glb  "Yellow Backpack" by Jungle Jim         https://sketchfab.com/3d-models/8521dc359bba4c1bba0576b56ca1cf2e
+  pack_white.glb   "Minimalist backpack" by Jungle Jim     https://sketchfab.com/3d-models/13b084b9fb654c6896c98357f838a588
+  pack_black.glb   "Small Black Backpack" by Jungle Jim    https://sketchfab.com/3d-models/3f584ae6b16e45c8ae69081f4609d75a
+
+Furniture for the home (all from Sketchfab, CC Attribution 4.0; each was reduced in detail and its texture shrunk for the game):
+  f_sofa.glb    "Modern Sofa" by 3dimentionalben                      https://sketchfab.com/3d-models/ac92f6e97eaa43c4ad6cb8f7c65ac43f
+  f_bed.glb     "Bed 06" by Doaa Sheha                                https://sketchfab.com/3d-models/30a491ca2dab4b61adc04bd51d3f45c1
+  f_dining.glb  "dining table" by Jelvehkar                           https://sketchfab.com/3d-models/f852064a2ddb40419f7c764b3cfb0d3e
+  f_fridge.glb  "Not-too-modern fridge" by anDDDres                   https://sketchfab.com/3d-models/fe9bd6617f924ac096cb37e2157c4d2a
+  f_coffee.glb  "Wooden Coffee Table" by m31odyr                      https://sketchfab.com/3d-models/fc8a0589c58b4016b4968ad743e8639d
+  f_tv.glb      "Flat Screen Television" by HippoStance               https://sketchfab.com/3d-models/f90d4fb91dd34b6791e8d66d00f96591
+  f_stand.glb   "Reclaimed TV Stand / Furniture" by maxsbond.work     https://sketchfab.com/3d-models/1fd5aaf7ede3441986d193403aa36893
+  f_lamp.glb    "PBR Floor Lamp (Free Download)" by Justin.Foley      https://sketchfab.com/3d-models/083c9408b89949d8b201e8a1bb6ce41c
+  f_art.glb     "Cafe Wall Pictures" by Guy in a Poncho               https://sketchfab.com/3d-models/7016b8389cdc45658bb1399f476fad00
+  f_plant.glb   "Monstera Deliciosa Potted Mid-Century plant" by Giora https://sketchfab.com/3d-models/1ab9bf841df04c07b1819be596327629
+
+Trees (Sketchfab, CC Attribution 4.0; textures shrunk for the game):
+  t_palm.glb   "Palm Tree Realistic" by 00amza        https://sketchfab.com/3d-models/ced3b31f14f940d0b7480a83e6f8c9c0
+  t_tree.glb   "Realistic Tree 2 Free" by Next Spring https://sketchfab.com/3d-models/2cd58e603ae542c78dd9cada46496921
+  t_tree2.glb  "Free Tree 1" by Giimann               https://sketchfab.com/3d-models/fc97bf9c59e344078ec728148f210e66
+
+Buildings (b_*.glb), all CC-BY 4.0, from sketchfab.com, shrunk for the game:
+b_1, b_2, b_4, b_5, b_6  "Low rise wall to wall office building" (five models) by aitortilla01
+b_3   "Mid rise wall to wall office building" by aitortilla01
+b_7   "Hi rise apartment building" by aitortilla01
+b_8   "New York styled hi rise apartment building" by aitortilla01
+b_9   "Low Rise Modern Condo 3" by aitortilla01
+b_10  "Game Ready Mid Poly Building" by ModelMaker (mireubay1)
+b_11  "Game ready building 5" by ModelMaker (mireubay1)
+
+Homes (h_*.glb), all CC-BY 4.0, from sketchfab.com, shrunk for the game:
+h_1  "Nivelles House 9 [Belgium]" by Lost Gecko
+h_2  "Troyes Shop 7 [France]" by Lost Gecko
+h_3  "Small Brick House" by jimbogies
+h_4  "Suburbian House" by Vlad Dyuhaaa
+h_5  "Low Rise Modern Condo 2" by aitortilla01
+h_6  "Modern Low Rise Condo 1" by aitortilla01
+h_7  "Mansion 2" by aitortilla01
+
+Ground plants (s_*.glb), all CC-BY 4.0, from sketchfab.com, shrunk for the game:
+s_shrub   "Cliff Shrub For Terrain" by Natural_Disbuster (lemedesign)
+s_bush    "Small bush" by yanix
+s_fern    "Fern" by evolveduk
+s_trop    "Tropical plant" by adam127
+s_flower  "Hydrangea" by hui.an.michelle.li
+
+Player characters, CC-BY 4.0, from sketchfab.com, textures reduced:
+mike.glb  "Rigged T-Pose Human Male w 50 Face Blendshapes" by Mike Alger
+zoe.glb   "Hight Quality Realistic Girl Character" by hammer.gamedev
+roxy.glb  "Hight Quality Realistic Girl Character" (leather jacket) by hammer.gamedev
+maya.glb  "Hight Quality Realistic Girl Character" (blue shirt) by hammer.gamedev
+leo.glb   "Casual Male 3D Character – T-Pose" by sthaarpit
+
+Police officers, CC-BY 4.0, from sketchfab.com, textures reduced:
+cop1.glb  "Police" by Alihan
+cop2.glb  "Police Man from the U.S.A. (T-pose rig mixamo)" by ustoopia
+cop3.glb  "Female Police Officer fully rigged 3d character" by Bad boy for life
+
+v_1.glb  "Modern luxury villa house building" by ziguratarchitecturestudio (Sketchfab), CC BY 4.0 - simplified for the game
+v_mac.glb   "Macchiato Mansion" by DreamingDogg (Sketchfab), CC BY 4.0 - simplified for the game
+v_amer.glb  "American House" by AleixoAlonso (Sketchfab), CC BY 4.0 - simplified for the game
+v_lux.glb, v_pool.glb  "Modern luxury villa house building home" by ziguratarchitecturestudio (Sketchfab), CC BY 4.0 - simplified for the game
+v_gate.glb  "Gate" by topfrank2013 (Sketchfab), CC BY 4.0 - simplified for the game
+n_1.glb  "modern house" by qurbanova.irade (Sketchfab), CC BY 4.0 - simplified for the game
+n_2.glb  "A modern house design" by abir_sd (Sketchfab), CC BY 4.0 - simplified for the game
+n_3.glb to n_8.glb  "Modern luxury villa house building" series by ziguratarchitecturestudio (Sketchfab), CC BY 4.0 - simplified for the game
+st_market.glb  "Mini Market" by Elbolilloduro (Sketchfab), CC BY 4.0 - simplified for the game
+st_shop.glb  "Textured Commercial Building" by lodgelus (Sketchfab), CC BY 4.0 - simplified for the game
+f_toilet.glb  "Toilet" by hippostance (Sketchfab), CC BY 4.0 - simplified for the game
+f_sink.glb  "Sink" by lagesnpiet (Sketchfab), CC BY 4.0 - simplified for the game
+f_shower.glb  "Shower Cabin" by Heliona (Sketchfab), CC BY 4.0 - simplified for the game
+f_chandelier.glb  "Chandelier" by MikhailKadilnikov (Sketchfab), CC BY 4.0 - simplified for the game
+f_door.glb  "Wooden door" by 7ASSAN (Sketchfab), CC BY 4.0 - simplified for the game
+f_curtain.glb  "Curtains" by Starven38 (Sketchfab), CC BY 4.0 - simplified for the game
+f_walllight.glb  "Wall Light" by nocyde (Sketchfab), CC BY 4.0
+v_gate2.glb  "Iron gate" by vladicom08 (Sketchfab), CC BY 4.0 - simplified for the game
+v_gate3.glb  "Gate_01" by Blulike1969 (Sketchfab), CC BY 4.0
+w_window.glb  "Residential Window" by AleixoAlonso (Sketchfab), CC BY 4.0 - simplified for the game
+s_bench.glb  "Park Bench" (Sketchfab), CC BY 4.0 - simplified for the game
+s_busstop.glb  "Bus Station" by turtlesomber (Sketchfab), CC BY 4.0 - simplified for the game
+
+Menu symbols (street_src/glyphs.js): Phosphor Icons, fill weight, MIT licence - https://phosphoricons.com
+s_patio.glb  "Patio Set" (Sketchfab), CC BY 4.0 - packed for the game
+
+ride-art.js (pictures for the errand card) and build/vehicles_src/: "Vino" scooter by minghauLoh (https://sketchfab.com/3d-models/vino-2205f4e69bc64df3aab03c71ab9d7492) and "Motorcycle - Custom Bike JAWA (LOW-POLY)" by kreems (https://sketchfab.com/3d-models/motorcycle-custom-bike-jawa-low-poly-13771fe558604aedae09b5157029e790), both CC BY 4.0.
+"Skateboard" by Jamoues (https://sketchfab.com/3d-models/skateboard-0f7b8ea366654674b217a743959798e7), CC BY 4.0 - picture in ride-art.js, model in build/vehicles_src/.
+
+Agberos (street touts), CC-BY 4.0, from sketchfab.com; face shapes, built-in animation and extra texture maps removed, textures reduced (tools/slim_char.py):
+agb1.glb  "A rigged, animated black African male character" by Maggadog (mwangiwambui.wambui)  https://sketchfab.com/3d-models/6507aba4e704464086e3ff528e3635e2
+agb2.glb  "Gangster Dealer Musculo" by EntropyNine (entropy9ine)  https://sketchfab.com/3d-models/1eed0758ec3d45a7ae5613db8b59eb7b

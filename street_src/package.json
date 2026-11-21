@@ -1,0 +1,9 @@
+{
+  "name": "blocktown-street",
+  "private": true,
+  "description": "Build tools for the Blocktown browser game (see ../CLAUDE.md)",
+  "dependencies": {
+    "esbuild": "0.28.2",
+    "three": "0.187.0"
+  }
+}

@@ -3,18 +3,359 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Hustle Empire Street</title>
+<title>Blocktown</title>
+<!-- Full screen on phones: added to the home screen it opens with no browser bars at all -->
+<meta name="theme-color" content="#86a9d6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Blocktown">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
 <style>
   html,body{margin:0;height:100%;background:#cfe3f1;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   #stage,#stage canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
   #joy{position:fixed;width:84px;height:84px;margin:-42px 0 0 -42px;border-radius:50%;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.45);pointer-events:none;opacity:.55}
   #joy.on{opacity:1}
+  #hud{position:fixed;z-index:5;top:calc(12px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));max-width:min(520px,calc(50vw - 90px));display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;pointer-events:none;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff}
+  #goal{font-weight:600;font-size:14px;line-height:1.35;padding:10px 14px;border-radius:14px;background:rgba(18,22,28,.55);max-width:min(460px,100%);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  #goal:empty{display:none}
+  #act{position:fixed;z-index:6;left:50%;transform:translateX(-50%);bottom:calc(72px + env(safe-area-inset-bottom));font:800 16px/1 -apple-system,"Segoe UI",Roboto,sans-serif;color:#14181d;background:#ffd24a;border:0;border-radius:999px;padding:17px 22px;min-height:52px;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;touch-action:manipulation}
+  #act:active{transform:translateX(-50%) scale(.97)}
+  .glass{background:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.38);box-shadow:0 4px 16px rgba(20,30,50,.14);-webkit-backdrop-filter:blur(14px) saturate(125%);backdrop-filter:blur(14px) saturate(125%)}
+  #life{position:fixed;z-index:5;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px;padding:7px 14px 7px 10px;border-radius:999px;font:800 13px/1 -apple-system,"Segoe UI",Roboto,sans-serif;color:#141a22;font-variant-numeric:tabular-nums}
+  /* life as five hearts, like the cells of a battery: green when full, amber as it runs down, red and blinking when low */
+  #hearts{display:flex;gap:4px}
+  #hearts i{position:relative;display:block;width:20px;height:20px}
+  #hearts svg{position:absolute;left:0;top:0;width:20px;height:20px}
+  #hearts .e{fill:rgba(20,30,50,.18)}
+  #hearts b{position:absolute;left:0;top:0;height:20px;overflow:hidden;transition:width .6s ease}
+  #hearts b svg{fill:#b6f02c;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.18));transition:fill .5s ease}
+  #life.mid #hearts b svg{fill:#f2a51a}#life.low #hearts b svg{fill:#e5383f}
+  #life.low #hearts{animation:blink 1s steps(2,start) infinite}
+  @keyframes blink{50%{opacity:.25}}
+  #hungry{padding:5px 10px;border-radius:999px;background:#d93a3f;color:#fff;font-size:12px;letter-spacing:.02em;animation:pulse 1.6s ease-in-out infinite}
+  #hungry[hidden],#hurt[hidden]{display:none}
+  #hurt{padding:5px 10px;border-radius:999px;background:#d93a3f;color:#fff;font-size:12px;letter-spacing:.02em}
+  #hitfx{position:fixed;inset:0;z-index:7;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(217,58,63,0) 35%,rgba(217,58,63,.75) 100%)}#hitfx.on{animation:hitfx 1.6s ease-out}@keyframes hitfx{0%{opacity:0;background-color:rgba(255,255,255,.55)}8%{opacity:1;background-color:rgba(255,255,255,0)}100%{opacity:0}}
+  @keyframes pulse{50%{opacity:.6}}
+  @media (prefers-reduced-motion:reduce){#hungry,#life.low #hearts{animation:none}#hearts b{transition:none}}
+  #map[hidden],#mapinfo[hidden],#places[hidden],#dm[hidden]{display:none}
+  #menubtn svg{width:24px;height:24px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+  /* chat: a conversation window like a messaging app; a floating glass panel on the right on a computer, the whole screen on a phone */
+  #dm{position:fixed;z-index:9;right:calc(20px + env(safe-area-inset-right));top:calc(178px + env(safe-area-inset-top));bottom:calc(150px + env(safe-area-inset-bottom));width:min(380px,calc(100vw - 40px));font-family:-apple-system,"SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  #dm .dmwin{height:100%;display:flex;flex-direction:column;border-radius:28px;overflow:hidden;background:radial-gradient(120% 50% at 20% 0%,rgba(255,255,255,.55),rgba(255,255,255,0) 60%),linear-gradient(165deg,rgba(255,255,255,.46),rgba(240,244,250,.22) 50%,rgba(255,255,255,.34));border:1px solid rgba(255,255,255,.65);box-shadow:0 24px 60px rgba(10,16,28,.36),inset 0 1px 0 rgba(255,255,255,.95),inset 0 0 0 1px rgba(255,255,255,.18);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);animation:dmIn .3s cubic-bezier(.2,.9,.3,1)}
+  @keyframes dmIn{from{opacity:0;transform:translateY(16px) scale(.97)}}
+  #dm header{display:flex;align-items:center;gap:10px;padding:12px 12px 12px 8px;border-bottom:1px solid rgba(0,0,0,.06);background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.2))}
+  #dm header button{width:36px;height:36px;border:0;border-radius:50%;background:none;font-size:30px;line-height:1;color:#111;cursor:pointer}
+  #dmx{font-size:26px!important;margin-left:auto}#dm header button:hover{background:rgba(0,0,0,.06)}
+  #dm .ring{display:block;width:40px;height:40px;padding:2px;border-radius:50%;background:linear-gradient(45deg,#feda75,#fa7e1e,#d62976,#962fbf,#4f5bd5);flex:none}
+  #dm .ring img{display:block;width:100%;height:100%;border-radius:50%;border:2px solid #fff;object-fit:cover;object-position:50% 12%;background:#dfe3ea;box-sizing:border-box;transform:scale(1);}
+  #dm .who{display:flex;flex-direction:column;line-height:1.2}#dm .who b{font-size:15px;color:#111}#dm .who span{font-size:12px;color:#8e8e93}
+  #dmlog{flex:1;overflow-y:auto;padding:14px 12px 6px;display:flex;flex-direction:column;gap:4px;background:transparent}
+  #dm .stamp{align-self:center;font-size:11.5px;font-weight:600;color:#8e8e93;margin:4px 0 10px}
+  #dm .row{display:flex;align-items:flex-end;gap:6px;max-width:82%}#dm .row.me{align-self:flex-end}#dm .row.them{align-self:flex-start}
+  #dm .av{position:relative;z-index:1;width:26px;height:26px;border-radius:50%;object-fit:cover;object-position:50% 12%;background:#dfe3ea;flex:none}
+  /* iOS message bubbles, with the little tail at the bottom corner */
+  #dm .bub{position:relative;padding:8px 13px;border-radius:19px;font-size:15.5px;line-height:1.32;word-wrap:break-word}
+  #dm .me .bub{background:linear-gradient(180deg,#3b9bff,#0a7cff);color:#fff}
+  #dm .them .bub{background:rgba(233,233,236,.95);color:#111}
+  #dm .bub::before{content:"";position:absolute;bottom:0;width:13px;height:16px}
+  #dm .me .bub::before{right:-6px;background:#0a7cff;-webkit-mask:radial-gradient(circle at 100% 0,transparent 12px,#000 12.5px);mask:radial-gradient(circle at 100% 0,transparent 12px,#000 12.5px)}
+  #dm .them .bub::before{left:-6px;background:rgba(233,233,236,.95);-webkit-mask:radial-gradient(circle at 0 0,transparent 12px,#000 12.5px);mask:radial-gradient(circle at 0 0,transparent 12px,#000 12.5px)}
+  #dm .typing .bub{display:flex;gap:4px;padding:12px 14px}#dm .typing i{width:7px;height:7px;border-radius:50%;background:#9a9aa0;animation:dot 1.1s infinite ease-in-out}#dm .typing i:nth-child(2){animation-delay:.15s}#dm .typing i:nth-child(3){animation-delay:.3s}
+  @keyframes dot{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+  #dmquick{display:flex;gap:8px;overflow-x:auto;padding:10px 12px 4px;background:transparent;scrollbar-width:none}
+  #dmthread{flex:1;display:flex;flex-direction:column;min-height:0}#dmthread[hidden],#dmlist[hidden]{display:none}
+  /* the reply chips and the message bar: glass too, but solid enough to read */
+  #dmquick button{flex:none;padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.75);background:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,.5));box-shadow:0 2px 8px rgba(10,16,28,.1),inset 0 1px 0 #fff;color:#111;font:600 14px -apple-system,"SF Pro Text","Segoe UI",Roboto,sans-serif;cursor:pointer;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);transition:background .15s ease}
+  #dmquick button:hover:not(:disabled){background:rgba(255,255,255,.92)}#dmquick button:disabled{opacity:.5;cursor:default}
+  #dm .dmbar{display:flex;align-items:center;gap:8px;margin:8px 12px 12px;padding:5px 5px 5px 5px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,.62));border:1px solid rgba(255,255,255,.8);box-shadow:0 4px 14px rgba(10,16,28,.12),inset 0 1px 0 #fff;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  #dm .cam{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;background:linear-gradient(135deg,#4f8dff,#3f6df5)}#dm .cam svg{width:20px;height:20px}
+  #dmin{flex:1;min-width:0;border:0;background:none;outline:none;font:400 15.5px -apple-system,"SF Pro Text","Segoe UI",Roboto,sans-serif;color:#111;padding:6px 2px}#dmin::placeholder{color:#7d7d84}
+  #dmsend{display:grid;place-items:center;width:34px;height:34px;flex:none;border:0;border-radius:50%;background:#0a7cff;cursor:pointer}#dmsend svg{width:17px;height:17px}#dmsend:hover{background:#0068e0}
+  #dm:not(.listing) .title,#dm.listing .ring,#dm.listing .who,#dm.listing #dmback{display:none}
+  #dm .title{font-size:17px;color:#111;margin-left:8px}
+  #dmlist{flex:1;overflow-y:auto;padding:6px 8px}
+  #dm .chatrow{display:flex;align-items:center;gap:12px;width:100%;padding:9px 8px;border:0;border-radius:16px;background:none;text-align:left;cursor:pointer;font-family:inherit}#dm .chatrow:hover{background:rgba(255,255,255,.55)}
+  #dm .chatrow img{width:52px;height:52px;border-radius:50%;object-fit:cover;object-position:50% 12%;background:#dfe3ea;flex:none}
+  #dm .chatrow span{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}#dm .chatrow b{font-size:15px;color:#111}#dm .chatrow small{font-size:13.5px;color:#55555c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #dm .chatrow time{font-size:12px;color:#8e8e93;align-self:flex-start;margin-top:4px}
+  #dm .empty{margin:40px 20px;text-align:center;color:#55555c;font-size:14.5px}
+  @media (max-width:760px){#dm{inset:0;width:auto}#dm .dmwin{border-radius:0;border:0;padding-top:env(safe-area-inset-top)}}
+  @media (prefers-reduced-motion:reduce){#dm .dmwin{animation:none}#dm .typing i{animation:none}}
+  #fade{position:fixed;inset:0;z-index:4;background:#05070b;opacity:0;pointer-events:none;transition:opacity .9s ease}#fade.on{opacity:.96}
+  @media (prefers-reduced-motion:reduce){#fade{transition:none}}
+  /* the places menu: a wall of app icons, five across, bent gently round you; rows slide up and down */
+  #places{position:fixed;inset:0;z-index:8;display:grid;place-items:start center;padding-top:max(13vh,84px);box-sizing:border-box;perspective:1200px;perspective-origin:50% 42%;background:rgba(8,12,20,.3);font-family:-apple-system,"SF Pro Display","Segoe UI",Roboto,sans-serif;touch-action:none;cursor:grab;overflow:hidden;-webkit-font-smoothing:antialiased}
+  #places:active{cursor:grabbing}
+  #placex{position:fixed;z-index:3;top:calc(14px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));width:40px;height:40px;border-radius:50%;border:0;background:rgba(40,46,56,.6);color:rgba(255,255,255,.92);font-size:22px;font-weight:300;line-height:1;cursor:pointer;transition:background .2s ease,transform .2s ease}
+  #placex:hover{background:rgba(70,78,92,.75);transform:scale(1.06)}
+  #places .holo{width:100%;color:#fff;transform-style:preserve-3d;text-align:center;pointer-events:none}
+  #placelist{--r:900px;display:grid;place-items:start center;height:156px;transform-style:preserve-3d;transform:translateZ(var(--r));pointer-events:none}
+  #placelist button{grid-area:1/1;pointer-events:auto;width:140px;display:flex;flex-direction:column;align-items:center;gap:9px;padding:0;border:0;background:none;color:#fff;font:inherit;cursor:pointer;touch-action:none;
+    transform:rotateY(var(--a)) translateZ(calc(-1 * var(--r))) translateY(var(--y));transition:transform .55s cubic-bezier(.2,.9,.25,1),opacity .4s ease}
+  #places.dragging #placelist button{transition:none}
+  #placelist button{will-change:transform,opacity;backface-visibility:hidden}
+  /* an app icon in the Apple manner: a "squircle" with a rich top-to-bottom gradient of the place's own colour, a soft light across the top, and a bold white symbol */
+  #placelist .icw{display:block;border-radius:20px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.3));transition:transform .25s cubic-bezier(.2,.9,.25,1.2),filter .2s ease}
+  #placelist .ic{display:block;width:88px;height:88px}
+  #placelist .ic>svg{display:block;width:100%;height:100%;stroke:none;fill:none}
+  #placelist button:hover:not(:disabled) .icw,#placelist button:focus-visible .icw{transform:scale(1.08);filter:drop-shadow(0 16px 18px rgba(0,0,0,.44)) brightness(1.06)}
+  #placelist button:focus-visible{outline:none}
+  #placelist button:disabled{cursor:default}#placelist button:disabled .ic{filter:saturate(.25) brightness(.8)}
+  #placelist .nm{font-weight:600;font-size:13.5px;letter-spacing:.005em;line-height:1.1;text-shadow:0 1px 6px rgba(0,0,0,.65)}
+  #placelist .far{margin-top:-7px;font-weight:500;font-size:12.5px;color:rgba(255,255,255,.7);font-variant-numeric:tabular-nums;text-shadow:0 1px 6px rgba(0,0,0,.65)}
+  @media (prefers-reduced-motion:reduce){#placelist button,#placelist .ic{transition:none}}
+  @media (max-width:760px){#places{perspective:800px;padding-top:max(12vh,76px)}#placelist{--r:520px;height:150px}#placelist button{width:84px;gap:7px}#placelist .ic{width:60px;height:60px}#placelist .ic .x{width:40px;height:40px}#placelist .nm{font-size:12px}#placelist .far{font-size:11px;margin-top:-4px}}
+  @media (min-width:520px) and (max-width:760px){#placelist{height:168px}#placelist button{width:116px;gap:9px}#placelist .ic{width:72px;height:72px}#placelist .ic .x{width:54px;height:54px}#placelist .nm{font-size:14px}#placelist .far{font-size:12px}}
+  #map{position:fixed;z-index:5;top:calc(12px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));width:148px;height:148px;border-radius:50%;border:3px solid rgba(255,255,255,.92);box-shadow:0 0 0 1px rgba(10,16,24,.35),0 10px 28px rgba(10,16,24,.45);background:#141c26}
+  #mapinfo{position:fixed;z-index:5;top:calc(170px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));width:154px;text-align:center;font:700 12px/1 -apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.8);font-variant-numeric:tabular-nums;pointer-events:none}
+  #mapinfo b{display:inline-block;padding:6px 11px;border-radius:999px;background:rgba(16,22,30,.72);border:1px solid rgba(255,255,255,.18)}#mapinfo:empty{display:none}
+  #menubtn{position:fixed;z-index:5;left:calc(16px + env(safe-area-inset-left));bottom:calc(32px + env(safe-area-inset-bottom));width:48px;height:48px;padding:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#141a22;touch-action:manipulation}
+  #menubtn svg{width:24px;height:24px;pointer-events:none}
+  #menubtn:hover{background:rgba(255,255,255,.58)}#menubtn:active{transform:scale(.95)}
+  #menubtn:focus-visible,#me:focus-visible,#friends button:focus-visible{outline:2px solid #141a22;outline-offset:2px}
+  #dock{position:fixed;z-index:5;left:50%;transform:translateX(-50%);bottom:calc(32px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:9px;padding:6px 12px 6px 6px;border-radius:999px}
+  #me{width:34px;height:34px;flex:none;padding:0;border-radius:50%;border:0;background:#3a4654;overflow:hidden;cursor:pointer;touch-action:manipulation}
+  #me img,#friends img{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 12%;transform:scale(1.55);transform-origin:50% 22%;pointer-events:none}
+  #me img:not([src]){visibility:hidden}
+  #friends{display:flex;align-items:center;gap:8px;padding-left:9px;border-left:1px solid rgba(20,30,50,.18)}
+  #friends button,#friends i{width:32px;height:32px;flex:none;padding:0;border-radius:50%;border:0;background:rgba(20,30,50,.16);overflow:hidden;cursor:pointer;touch-action:manipulation}
+  #friends i{cursor:default}
+  #friends button:hover{outline:2px solid #ffd24a;outline-offset:1px}
+  #friends b{display:grid;place-items:center;min-width:32px;height:32px;padding:0 7px;box-sizing:border-box;border-radius:999px;background:rgba(20,30,50,.16);font:700 13px/1 -apple-system,"Segoe UI",Roboto,sans-serif;color:#141a22;font-variant-numeric:tabular-nums}
+  /* Every control on the bottom row shares one centre line, 58 px up: the menu button, the people bar and the walking stick. */
+  /* On narrower screens life moves to the top left with your money under it, so it never runs into the map on the right. */
+  @media (max-width:1100px){
+    #life{left:calc(12px + env(safe-area-inset-left));transform:none}
+    #hud{top:calc(62px + env(safe-area-inset-top));left:calc(16px + env(safe-area-inset-left))}
+  }
+  /* phones: smaller pieces, the same lines */
+  @media (max-width:760px),(max-height:520px) and (pointer:coarse){
+    #life{top:calc(12px + env(safe-area-inset-top));gap:7px;padding:6px 10px 6px 9px;font-size:12px}
+    #hearts{gap:2px}#hearts i,#hearts svg,#hearts b{width:16px;height:16px}
+    #hungry{padding:4px 8px;font-size:11px}
+    #hud{top:calc(52px + env(safe-area-inset-top));left:calc(14px + env(safe-area-inset-left));flex-direction:column;max-width:calc(100vw - 140px)}
+    #hud #money{font-size:15px;padding:4px 0}
+    #map{width:96px;height:96px;top:calc(12px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right))}
+    #mapinfo{top:calc(116px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));width:96px;font-size:11px}
+    #menubtn{width:38px;height:38px;left:calc(14px + env(safe-area-inset-left));bottom:calc(37px + env(safe-area-inset-bottom))}#menubtn svg{width:20px;height:20px}
+    #dock{bottom:calc(37px + env(safe-area-inset-bottom));gap:6px;padding:5px 8px 5px 5px}
+    #me,#friends button,#friends i,#friends b{width:26px;height:26px;min-width:26px}#friends{gap:5px;padding-left:6px}#friends b{width:auto;font-size:11px;padding:0 5px}
+    #friends>:nth-child(n+4){display:none}
+    #act{bottom:calc(92px + env(safe-area-inset-bottom))}
+  }
+  /* life: a star and five bars that empty from the right (lime, then amber, then red) */
+  #life{gap:9px !important;padding:8px 13px 8px 11px !important}
+  #hearts{gap:3px !important}#hearts svg{display:none}
+  #hearts i{width:17px !important;height:10px !important;border-radius:3px;background:rgba(20,30,50,.3)}
+  #hearts b{height:10px !important;width:auto;border-radius:3px;background:var(--lime);box-shadow:inset 0 1px 0 rgba(255,255,255,.5);transition:width .6s ease,background .5s ease}
+  #life.mid #hearts b{background:#f2a51a}#life.low #hearts b{background:#e5383f}
+  #talk[hidden],#act[hidden],#look[hidden]{display:none}
+  #chars[hidden]{display:none}
+  #chars{top:calc(64px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));width:min(400px,calc(100vw - 24px));max-height:calc(100vh - 84px);display:flex;flex-direction:column;overflow:hidden}
+  #chars header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.16);font-weight:800;font-size:17px}
+  #chars header button{background:#ffd24a;color:#14181d;border:1px solid #ffd24a;border-radius:999px;font-weight:700;text-align:center;padding:9px 16px;min-height:40px;cursor:pointer}
+  #chars p{margin:0;padding:10px 16px 0;font-size:13px;color:rgba(255,255,255,.75)}
+  #charlist{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:12px;overflow-y:auto;touch-action:pan-y}
+  #charlist .card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 6px 10px;text-align:center;font:600 14px/1.2 -apple-system,"Segoe UI",Roboto,sans-serif;background:rgba(255,255,255,.08);color:#fff;border:2px solid rgba(255,255,255,.18);border-radius:14px;cursor:pointer}
+  #charlist .card img{width:100%;max-width:130px;aspect-ratio:1;object-fit:contain;pointer-events:none}
+  #charlist .card[aria-pressed="true"]{border-color:#ffd24a;background:rgba(255,210,74,.16)}
+  #look{top:calc(64px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));width:min(400px,calc(100vw - 24px));max-height:calc(100vh - 84px);display:flex;flex-direction:column;overflow:hidden}
+  #look header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.16);font-weight:800;font-size:17px}
+  #look header button{background:#ffd24a;color:#14181d;border-color:#ffd24a;text-align:center;padding:9px 16px;min-height:40px}
+  #look p{margin:0;padding:10px 16px 0;font-size:13px;color:rgba(255,255,255,.75)}
+  #packs{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:12px;overflow-y:auto;touch-action:pan-y}
+  #packs .card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 6px 10px;text-align:center;font-size:13px;background:rgba(255,255,255,.08);color:#fff;border:2px solid rgba(255,255,255,.18)}
+  #packs .card img{width:100%;max-width:130px;aspect-ratio:1;object-fit:contain;pointer-events:none}
+  #packs .card[aria-pressed="true"]{border-color:#ffd24a;background:rgba(255,210,74,.16)}
+  #talk{left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom));width:min(560px,calc(100vw - 32px));padding:16px 18px 18px}
+  #who{font-weight:800;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#ffd24a;margin-bottom:6px}
+  #say{margin:0 0 14px;font-size:16px;line-height:1.45;text-wrap:pretty}
+  #opts{display:flex;flex-direction:column;gap:8px}
+  .panel{position:fixed;z-index:7;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;background:rgba(16,20,26,.88);border:1px solid rgba(255,255,255,.22);border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.45);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);-webkit-user-select:none;user-select:none}
+  .panel[hidden],#count[hidden],#job[hidden],#gain[hidden]{display:none}
+  /* errands: one sheet of frosted glass, bent round in front of you like a curved screen. The bend is real: the sheet is cut into
+     narrow upright strips, each turned a little more than the last round a circle, and each shows its own part of the same card. */
+  :root{--lime:#b6f02c;--lime-d:#17230a}
+  #errand[hidden]{display:none}
+  #errand{position:fixed;inset:0;z-index:8;display:grid;place-items:end center;box-sizing:border-box;padding-bottom:var(--bot,90px);background:rgba(8,12,20,.18);font-family:-apple-system,"SF Pro Display","Segoe UI",Roboto,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;animation:erfade .25s ease both}
+  @keyframes erfade{from{opacity:0}}
+  #erfrost{display:none}
+  #erbend{width:var(--w);max-height:calc(100vh - var(--bot,90px) - 12px);overflow-y:auto;border-radius:26px;background:rgba(255,255,255,.44);-webkit-backdrop-filter:blur(30px) saturate(160%) brightness(1.06);backdrop-filter:blur(30px) saturate(160%) brightness(1.06);box-shadow:0 18px 44px rgba(10,20,35,.3),inset 0 0 0 1px rgba(255,255,255,.55);animation:errise .34s cubic-bezier(.2,.9,.25,1) both}
+  @keyframes errise{from{transform:translateY(22px)}}
+  /* page one of an errand: your character, large on the left, tells you what it is; tap to go on */
+  #brief[hidden]{display:none}
+  #brief{position:fixed;inset:0;z-index:8;display:grid;place-items:end center;box-sizing:border-box;padding-bottom:var(--bot,90px);background:rgba(8,12,20,.18);font-family:-apple-system,"SF Pro Display","Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;cursor:pointer;animation:erfade .25s ease both}
+  #brief .bx{position:relative;width:var(--w);min-height:132px;box-sizing:border-box;padding:28px 20px 30px 138px;border-radius:26px;color:#141a22;background:rgba(255,255,255,.5);-webkit-backdrop-filter:blur(30px) saturate(160%) brightness(1.06);backdrop-filter:blur(30px) saturate(160%) brightness(1.06);box-shadow:0 18px 44px rgba(10,20,35,.3),inset 0 0 0 1px rgba(255,255,255,.6),inset 0 1.5px 0 #fff;animation:errise .34s cubic-bezier(.2,.9,.25,1) both}
+  #brief .pc{position:absolute;left:0;bottom:0;width:140px;height:236px;overflow:hidden;border-bottom-left-radius:26px;pointer-events:none}
+  #brief .pc img{position:absolute;left:50%;bottom:-2px;height:100%;transform:translateX(-52%);filter:drop-shadow(0 6px 10px rgba(10,20,35,.3));animation:brup .42s cubic-bezier(.2,.9,.25,1) both}
+  @keyframes brup{from{transform:translateX(-52%) translateY(26px);opacity:0}}
+  #brname{position:absolute;left:128px;top:-17px;height:34px;padding:0 18px;display:flex;align-items:center;border-radius:999px;background:linear-gradient(180deg,#c9f74e,#a5e314);color:#17230a;font-size:17px;font-weight:900;font-style:italic;letter-spacing:-.01em;box-shadow:0 6px 14px rgba(90,150,0,.3),inset 0 1.5px 0 rgba(255,255,255,.65)}
+  #brtext{margin:0;font-size:17px;line-height:1.38;font-weight:650;letter-spacing:-.005em;min-height:4.1em;text-wrap:pretty}
+  #brief .nx{position:absolute;right:16px;bottom:14px;height:44px;padding:0 20px 0 16px;border-radius:99px;display:flex;align-items:center;gap:8px;font:normal 800 17px/1 -apple-system,"Segoe UI",Roboto,sans-serif;color:#17230a;background:linear-gradient(180deg,#c9f74e,#a5e314);box-shadow:0 8px 18px rgba(120,190,0,.32),inset 0 1.5px 0 rgba(255,255,255,.7);opacity:0;transform:scale(.8);transition:opacity .2s ease,transform .25s cubic-bezier(.2,.9,.25,1.4)}
+  #brief .nx svg{width:16px;height:16px;display:block}#brief.plain .nx{padding:0 22px}#brief .nx2{position:absolute;bottom:14px;height:44px;padding:0 22px;border-radius:99px;display:none;align-items:center;font:normal 800 17px/1 -apple-system,"Segoe UI",Roboto,sans-serif;color:#141a22;background:rgba(255,255,255,.75);box-shadow:inset 0 0 0 1px #fff}#brief.done .nx2:not([hidden]){display:flex}#brief.other .pc{height:100%;border-radius:26px 0 0 26px}#brief.other .pc img{left:-6%;width:98%;height:auto;bottom:0;transform:none;animation:none}#brief.other #brname{background:#141a22;color:#fff}#brief.plain .nx svg{display:none}
+  #brief.done .nx{opacity:1;transform:none}
+  #brief:not(.ask) .bx{padding-bottom:70px}#brief.ask .bx{padding-bottom:22px}#brief.ask{cursor:default}#brief.ask .nx{display:none}
+  #brform{display:flex;gap:8px;margin-top:12px}#brform[hidden]{display:none}
+  #brin{flex:1;min-width:0;height:46px;box-sizing:border-box;padding:0 14px;border-radius:14px;border:1.5px solid rgba(20,26,34,.16);background:rgba(255,255,255,.85);color:#141a22;font:700 17px/1 -apple-system,"Segoe UI",Roboto,sans-serif;-webkit-user-select:text;user-select:text;outline:none}
+  #brin:focus{border-color:#8fd10f;box-shadow:0 0 0 3px rgba(182,240,44,.45)}
+  #brform button{flex:none;height:46px;padding:0 20px;border:0;border-radius:14px;background:linear-gradient(180deg,#c9f74e,#a5e314);color:#17230a;font:800 16px/1 -apple-system,"Segoe UI",Roboto,sans-serif;cursor:pointer;box-shadow:inset 0 1.5px 0 rgba(255,255,255,.7)}
+  #brname[hidden]{display:none}
+  @media (max-width:760px){#brief .bx{padding:26px 16px 28px 118px;min-height:124px}#brief .pc{width:122px;height:206px}#brname{left:110px;font-size:16px;height:32px;top:-16px}#brtext{font-size:15.5px}}
+  @media (prefers-reduced-motion:reduce){#brief,#brief .bx,#brief .pc img,#brief.done .nx{animation:none}}
+  /* page two: how you will travel - a row of cards you slide through, the one in the middle large, its picture standing up out of it */
+  .pick{position:relative;box-sizing:border-box;width:var(--w);padding:18px 16px 16px;color:#141a22;text-align:left;--sh:270px;background:linear-gradient(155deg,rgba(255,255,255,.7) 0%,rgba(255,255,255,.34) 42%,rgba(255,255,255,.26) 62%,rgba(255,255,255,.52) 100%);box-shadow:inset 0 2px 0 #fff,inset 0 0 0 1.5px rgba(255,255,255,.75),inset 0 -22px 40px rgba(255,255,255,.22);border-radius:26px}
+  .pick::before{content:"";position:absolute;left:0;right:0;top:0;height:44%;border-radius:26px 26px 50% 50%/26px 26px 36px 36px;background:linear-gradient(180deg,rgba(255,255,255,.6),rgba(255,255,255,.08) 70%,rgba(255,255,255,0));pointer-events:none}
+  .pick>*{position:relative}
+  .pick .hd{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:2px 2px 0}.pick h2{margin:0;font-size:23px;line-height:1.14;font-weight:800;letter-spacing:-.025em;color:#141a22;text-wrap:balance}
+  .pick h3{margin:-2px 0 12px;text-align:center;font-size:32px;line-height:1.1;font-weight:800;letter-spacing:-.03em;color:var(--lime,#b6f02c);-webkit-text-stroke:4px #141a22;paint-order:stroke fill;text-shadow:0 3px 8px rgba(20,30,50,.18)}
+  .pick h3.sw{animation:pksw .3s cubic-bezier(.2,.9,.25,1.2)}@keyframes pksw{from{scale:.86;opacity:.4}}
+  .pick .x{flex:none;width:38px;height:38px;padding:0;border-radius:50%;border:0;background:rgba(255,255,255,.7);box-shadow:inset 0 0 0 1px rgba(255,255,255,.9);cursor:pointer;display:grid;place-items:center}
+  .pick .x svg{width:14px;height:14px;display:block}
+  .pick .rail{position:relative;height:var(--sh);margin:0 -16px;overflow:hidden;touch-action:pan-y}
+  .pick .trk{position:absolute;inset:0;display:flex;transform:translateX(calc(var(--at) * -100%));transition:transform .55s cubic-bezier(.3,.85,.2,1)}
+  .pick .it{position:relative;flex:none;width:100%;height:100%;opacity:0;scale:.78;transition:opacity .4s ease,scale .55s cubic-bezier(.3,.85,.2,1);pointer-events:none}
+  .pick .it.on{opacity:1;scale:1}
+  .pick .it img,.pick .it canvas{position:absolute;left:50%;transform:translateX(-50%);max-width:none;filter:drop-shadow(0 14px 12px rgba(20,30,50,.3))}
+  .pick .it canvas.me{height:calc(var(--sh) - 8px);bottom:12px}.pick .it canvas.sk{height:calc(var(--sh) - 4px);bottom:2px;transform-origin:50% 92%;animation:skbob 2.6s ease-in-out infinite}@keyframes skbob{0%,100%{transform:translateX(-50%) rotate(-1.6deg)}50%{transform:translateX(-50%) translateY(-3px) rotate(1.6deg)}}.pick .it img.scooter{height:calc(var(--sh) * .78);bottom:20px}.pick .it img.bike{width:236px;bottom:40px}.pick .it img.skate{width:232px;bottom:54px}
+  .pick .nav{position:absolute;top:50%;z-index:3;width:42px;height:42px;margin-top:-21px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.82);box-shadow:inset 0 0 0 1px #fff,0 6px 14px rgba(20,30,50,.16);display:grid;place-items:center;cursor:pointer;touch-action:manipulation;transition:opacity .25s ease,transform .15s ease}
+  .pick .nav:active{transform:scale(.92)}
+  .pick .nav svg{width:15px;height:15px;display:block}.pick .nav.l{left:14px}.pick .nav.r{right:14px}.pick .nav.r svg{transform:scaleX(-1)}.pick .nav[disabled]{opacity:0;pointer-events:none}
+  .pick .opts{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:0 0 14px}
+  .pick .op{position:relative;height:68px;padding:0;border:0;border-radius:18px;background:linear-gradient(165deg,rgba(255,255,255,.66),rgba(255,255,255,.3));box-shadow:inset 0 0 0 1px rgba(255,255,255,.8);overflow:hidden;cursor:pointer;touch-action:manipulation;display:grid;place-items:center;transition:transform .15s ease,box-shadow .25s ease,background .25s ease}
+  .pick .op:active{transform:scale(.95)}
+  .pick .op img{max-width:76%;max-height:74%;pointer-events:none}.pick .op img.me{max-width:none;max-height:none;width:100%;height:100%;object-fit:cover;object-position:50% 8%}
+  .pick .op.on{background:linear-gradient(165deg,#fff,rgba(255,255,255,.7));box-shadow:0 0 0 3.5px var(--lime,#b6f02c),0 8px 18px rgba(120,190,0,.3)}
+  .pick .op.lock img{opacity:.55}
+  .pick .op .lk{position:absolute;right:5px;top:5px;width:18px;height:18px}.pick .op .lk svg{width:100%;height:100%;display:block}
+  .pick .start,.pick .price{display:flex;width:100%;align-items:center;justify-content:center;gap:10px;height:60px;padding:0 26px;border:0;border-radius:999px;font:800 21px/1 -apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:-.01em;cursor:pointer;touch-action:manipulation}
+  .pick .start{background:linear-gradient(180deg,#c9f74e,#a5e314);color:#17230a;box-shadow:0 10px 22px rgba(120,190,0,.32),inset 0 1.5px 0 rgba(255,255,255,.7)}
+  .pick .start svg{display:block;width:20px;height:20px;flex:none}.pick .start span{display:block;line-height:1;padding-top:1px}
+  .pick .price{background:#141a22;color:#fff;box-shadow:0 10px 22px rgba(10,20,35,.3),inset 0 1.5px 0 rgba(255,255,255,.14);font-variant-numeric:tabular-nums}
+  .pick .price svg{width:22px;height:22px;flex:none;margin-left:2px}.pick .price svg circle{fill:rgba(255,255,255,.16)}
+  .pick .price .c{width:24px;height:24px;border-radius:50%;flex:none;background:radial-gradient(circle at 34% 30%,#fff6c2 0 12%,#ffd84a 30%,#f5b21a 68%,#c98408 100%);box-shadow:inset 0 0 0 2px #e9a514,inset 0 0 0 3.5px rgba(255,240,170,.75)}
+  @media (min-width:760px){.pick{--sh:340px;padding:22px 20px 20px}.pick .rail{margin:0 -20px}.pick h3{font-size:36px}.pick h2{font-size:27px}.pick .op{height:80px}.pick .it img.bike{width:330px}.pick .it img.skate{width:290px}}
+  @media (max-height:740px){.pick{--sh:190px}.pick h2{font-size:20px}.pick h3{font-size:26px;margin-bottom:8px}.pick .op{height:56px}.pick .it img.bike{width:210px;bottom:22px}.pick .it img.skate{width:190px;bottom:36px}.pick .start,.pick .price{height:54px}}
+  @media (max-height:600px){.pick{--sh:120px}.pick h2{font-size:17px}.pick h3{font-size:22px}.pick .it img.bike{width:150px;bottom:14px}.pick .it img.skate{width:150px;bottom:24px}}
+  @media (prefers-reduced-motion:reduce){.pick .trk,.pick .it{transition:none}.pick h3.sw,.pick .it canvas.sk{animation:none}}
+  .ercard{box-sizing:border-box;width:var(--w);padding:0 16px 0;color:#141a22;position:relative;
+    background:linear-gradient(180deg,rgba(255,255,255,.5) 0%,rgba(255,255,255,.2) 40%,rgba(255,255,255,.12) 100%);box-shadow:inset 0 -1px 0 rgba(255,255,255,.4)}
+  .ercard header{margin:0 -16px 13px;height:54px;padding:0 16px 0 22px;display:flex;align-items:center;justify-content:space-between;
+    background:linear-gradient(105deg,#bdf235 0%,#b6f02c 52%,#cdf75c 52.2%,#c3f447 74%,#b6f02c 74.2%,#aee722 100%);box-shadow:inset 0 1.5px 0 rgba(255,255,255,.6),0 6px 14px rgba(120,190,0,.18)}
+  .ercard h3{margin:0;font-size:23px;font-weight:900;font-style:italic;letter-spacing:-.025em;color:#17230a}
+  .ercard .x{width:32px;height:32px;border-radius:50%;border:0;background:rgba(23,35,10,.14);color:#17230a;font-size:19px;line-height:1;cursor:pointer}
+  .ercard .brief{display:grid;grid-template-columns:auto auto 1fr;gap:0 12px;align-items:stretch}
+  .ercard .face{width:96px;height:102px;border-radius:22px;overflow:hidden;background:linear-gradient(180deg,#f3f6fa,#dfe5ee);box-shadow:0 8px 18px rgba(20,30,50,.16),inset 0 0 0 1.5px rgba(255,255,255,.9);position:relative}
+  .ercard .face img{position:absolute;left:50%;top:-4%;height:128%;transform:translateX(-50%);pointer-events:none}
+  .ercard .dots{display:flex;flex-direction:column;align-items:center;padding:14px 0 16px;width:18px}
+  .ercard .dots i{flex:none;width:17px;height:17px;border-radius:50%;box-sizing:border-box;border:4px solid #141a22;background:#fff}
+  .ercard .dots i.to{background:var(--lime);box-shadow:0 0 0 3px rgba(182,240,44,.35)}
+  .ercard .dots b{flex:1;width:0;border-left:2.5px dashed #141a22;margin:3px 0}
+  .ercard .legs{display:flex;flex-direction:column;min-width:0}
+  .ercard .leg{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+  .ercard .leg+.leg{border-top:1.5px solid rgba(20,26,34,.13)}
+  .ercard .leg>span{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .ercard small{font-size:12.5px;font-weight:600;color:#3b4450}
+  .ercard .leg b{font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ercard .leg em{flex:none;width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:rgba(255,255,255,.62);box-shadow:0 3px 8px rgba(20,30,50,.08),inset 0 1px 0 #fff}
+  .ercard .leg em svg{width:24px;height:24px}
+  .ercard .stats{display:flex;align-items:center;margin:12px 0 12px;padding:8px 6px;border-radius:20px;background:rgba(255,255,255,.62);box-shadow:0 4px 12px rgba(20,30,50,.07),inset 0 1px 0 #fff}
+  .ercard .stats>span{flex:1;display:flex;align-items:center;justify-content:center;gap:10px}.ercard .stats>span>svg{width:30px;height:28px;flex:none}
+  .ercard .stats>span>span{display:flex;flex-direction:column;gap:0}
+  .ercard .stats b{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+  .ercard .stats>i{width:1.5px;height:30px;background:rgba(20,26,34,.16)}
+  .ercard .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 12px}
+  .ercard .mode{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:98px;padding:0 0 9px;border-radius:20px;color:#141a22;font:inherit;cursor:pointer;touch-action:manipulation;min-width:0;overflow:hidden;
+    border:1.5px solid rgba(255,255,255,.8);background:linear-gradient(170deg,rgba(255,255,255,.72),rgba(255,255,255,.4));box-shadow:0 5px 14px rgba(20,30,50,.09),inset 0 1px 0 #fff}
+  .ercard .mode .pic{position:absolute;left:0;right:0;top:7px;bottom:31px;display:grid;place-items:center}
+  .ercard .mode .pic img{max-width:74%;max-height:54px;filter:drop-shadow(0 5px 5px rgba(20,30,50,.22));pointer-events:none}
+  .ercard .mode .pic img.me{position:absolute;left:50%;bottom:-8%;transform:translateX(-50%);max-width:none;max-height:none;height:124%}
+  .ercard .mode .nm{position:relative;font-weight:800;font-size:13.5px;line-height:1.1;white-space:nowrap}
+  .ercard .mode .badge{position:absolute;right:7px;top:7px;width:22px;height:22px}.ercard .mode .badge svg{display:block;width:100%;height:100%}
+  .ercard .mode[aria-pressed="true"]{border:2.5px solid var(--lime);background:linear-gradient(170deg,#e6fba6,#c4f447);box-shadow:0 0 0 1.5px rgba(160,225,20,.9),0 8px 18px rgba(120,190,0,.3),inset 0 1px 0 rgba(255,255,255,.8)}
+  .ercard .mode.locked .pic img{opacity:.9}
+  .ercard .start{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;height:58px;border:0;border-radius:999px;background:linear-gradient(180deg,#c9f74e,#a5e314);color:#17230a;font:800 21px/1 -apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:-.01em;cursor:pointer;touch-action:manipulation;box-shadow:0 10px 22px rgba(120,190,0,.32),inset 0 1.5px 0 rgba(255,255,255,.7)}
+  .ercard .start svg{display:block;width:20px;height:20px;flex:none}.ercard .start span{display:block;line-height:1;padding-top:1px}
+  .ercard .room{height:16px}
+  @media (max-height:640px){.ercard .face{height:84px}.ercard .mode{height:84px}.ercard header{height:48px}}
+  #herotop{position:fixed;z-index:9;pointer-events:none}#herotop[hidden]{display:none}
+  #ermeasure{position:fixed;left:-9999px;top:0;visibility:hidden}
+  @media (prefers-reduced-motion:reduce){#errand,#erbend{animation:none}}
+  #count{position:fixed;inset:0;z-index:9;display:grid;place-items:center;pointer-events:none;font:900 132px/1 -apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;text-shadow:0 6px 30px rgba(0,0,0,.55),0 0 2px rgba(0,0,0,.6);font-variant-numeric:tabular-nums}
+  #count.go{color:var(--lime)}
+  #count.pop{animation:countpop .9s cubic-bezier(.2,.9,.3,1) both}
+  @keyframes countpop{0%{transform:scale(1.7);opacity:0}18%{transform:scale(1);opacity:1}80%{opacity:1}100%{transform:scale(.92);opacity:0}}
+  /* the errand clock: just the time, on lime, centred under the life bar */
+  #job{position:fixed;z-index:5;left:50%;top:calc(52px + env(safe-area-inset-top));transform:translateX(-50%);display:flex;pointer-events:none}
+  #job[hidden]{display:none}
+  #job .in{display:flex}#jobl{display:none !important}
+  #jobt{display:flex;align-items:center;gap:6px;height:42px;padding:0 16px 0 12px;border-radius:999px;background:linear-gradient(180deg,#c9f74e,#a5e314);color:#17230a;font:800 19px/1 -apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em;box-shadow:inset 0 1.5px 0 rgba(255,255,255,.65),0 6px 16px rgba(60,100,0,.3)}
+  #jobt svg{width:19px;height:19px;flex:none}
+  #job.late #jobt{background:linear-gradient(180deg,#f0525a,#d92f37);color:#fff;box-shadow:inset 0 1.5px 0 rgba(255,255,255,.35),0 4px 10px rgba(217,47,55,.3);animation:pulse 1s ease-in-out infinite}#job.late #jobt svg *{stroke:#fff}
+  #jobl{display:flex;flex-direction:column;gap:1px;min-width:0;padding-right:2px}
+  #jobl small{font-size:11.5px;font-weight:600;color:#3b4450;line-height:1.1}#jobl b{font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}
+  /* phones: the errand strip is one slim line, the same height as the life bar */
+  @media (max-width:760px),(max-height:520px) and (pointer:coarse){
+    /* life: a small bar in the middle of the top edge; your money moves up into the corner it leaves */
+    #life{left:50% !important;transform:translateX(-50%) !important;top:calc(12px + env(safe-area-inset-top)) !important;gap:6px !important;padding:6px 10px 6px 9px !important;font-size:11px !important}
+    #hearts{gap:2.5px !important}#hearts i{width:12px !important;height:6px !important;border-radius:2px}#hearts b{height:6px !important;border-radius:2px}
+    #hungry{padding:3px 7px;font-size:10px}
+    #hud{top:calc(12px + env(safe-area-inset-top)) !important;gap:9px !important}
+    #hud #money{padding:3px 0 !important}
+    #job{top:calc(45px + env(safe-area-inset-top))}
+    #jobt{height:31px;gap:5px;padding:0 13px 0 10px;border-radius:999px;font-size:16.5px}#jobt svg{width:16px;height:16px}
+  }
+  /* a coin on its way to your balance */
+  .coin{position:fixed;left:-11px;top:-11px;z-index:11;width:22px;height:22px;border-radius:50%;pointer-events:none;will-change:transform,opacity;
+    background:radial-gradient(circle at 34% 30%,#fff6c2 0 12%,#ffd84a 30%,#f5b21a 68%,#c98408 100%);box-shadow:inset 0 0 0 2px #e9a514,inset 0 0 0 3.5px rgba(255,240,170,.75),0 3px 6px rgba(60,40,0,.35)}
+  #money{transform-origin:0 50%}
+  #gain{font:800 15px/1 -apple-system,"Segoe UI",Roboto,sans-serif;padding:7px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  #gain.up{background:var(--lime);color:var(--lime-d)}#gain.down{background:#d93a3f;color:#fff}
+  #gain.go{animation:gainpop 2.6s ease both}
+  @keyframes gainpop{0%{transform:translateY(10px) scale(.9);opacity:0}10%{transform:none;opacity:1}82%{opacity:1}100%{transform:translateY(-6px);opacity:0}}
+  @media (prefers-reduced-motion:reduce){#count.pop,#gain.go,#job.late #jobt{animation:none}}
+  .panel button{font:700 15px/1.2 inherit;font-family:inherit;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);border-radius:12px;padding:12px 14px;min-height:44px;text-align:left;cursor:pointer;touch-action:manipulation}
+  .panel button:first-child:not(:disabled){background:#ffd24a;color:#14181d;border-color:#ffd24a}
+  .panel button:disabled{opacity:.45;cursor:default}
+  #veil{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:#12161c;color:#fff;font:700 18px -apple-system,"Segoe UI",Roboto,sans-serif;transition:opacity .7s ease;pointer-events:none}
+  #veil.gone{opacity:0}
+  @media (prefers-reduced-motion:reduce){#veil{transition:none}}
   #knob{position:absolute;left:50%;top:50%;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;background:rgba(255,255,255,.85);box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  /* The map, tapped open: large in the middle of the screen, over everything else, with where it leads written under it */
+  #map{cursor:pointer;transition:width .28s cubic-bezier(.2,.9,.25,1),height .28s cubic-bezier(.2,.9,.25,1),top .28s cubic-bezier(.2,.9,.25,1),right .28s cubic-bezier(.2,.9,.25,1)}
+  #map.big{z-index:9;width:min(88vw,66vh);height:min(88vw,66vh);top:calc(50% - min(44vw,33vh) - 18px);right:calc(50% - min(44vw,33vh));box-shadow:0 0 0 1px rgba(10,16,24,.35),0 24px 70px rgba(0,0,0,.55),0 0 0 100vmax rgba(8,12,20,.38)}
+  #mapinfo.big{z-index:9;top:calc(50% + min(44vw,33vh) - 4px);right:calc(50% - 120px);width:240px;font-size:15px}
+  /* iPhone: how to get the game full screen (Safari cannot hide its own bars for a web page) */
+  #fullhint{position:fixed;z-index:9;left:50%;transform:translateX(-50%);top:calc(50% - 40px);width:min(300px,82vw);padding:16px 18px 14px;border-radius:20px;background:rgba(18,24,34,.84);-webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);color:#fff;font:500 14px/1.4 -apple-system,"SF Pro Text",system-ui,sans-serif;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  #fullhint b{display:block;font-size:16px;margin-bottom:6px}
+  #fullhint button{margin-top:12px;border:0;border-radius:12px;padding:9px 22px;background:#fff;color:#141a22;font:600 14px -apple-system,system-ui,sans-serif;cursor:pointer}
+  #fullhint[hidden]{display:none}
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="joy"><div id="knob"></div></div>
+<div id="hud"><div id="money"></div><div id="gain" hidden></div><div id="job" hidden><div class="in"><span id="jobt"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="#17230a" stroke-width="2.300" stroke-linecap="round"><circle cx="12" cy="13.500" r="7.500"/><path d="M12 9.500v4.200l2.600 1.600 M9.500 2.800h5 M12 2.800V6"/></g></svg><span id="jobtv"></span></span><span id="jobl"><small id="jobls"></small><b id="joblb"></b></span></div></div><div id="goal"></div></div>
+<div id="life" class="glass" role="status" aria-label="Life"><div id="hearts" aria-hidden="true"></div><span id="lifetxt">100</span><b id="hungry" hidden>Hungry</b><b id="hurt" hidden>Hurt</b></div>
+<canvas id="map" width="296" height="296" aria-label="Map: the way home"></canvas>
+<div id="mapinfo"></div>
+<div id="fullhint" hidden role="dialog" aria-label="Play full screen"><b>Play full screen</b>Tap the Share button, then <b style="display:inline;font-size:14px">Add to Home Screen</b>. Open the game from your home screen and the browser bars are gone.<br><button type="button">Got it</button></div>
+<button id="menubtn" class="glass" type="button" aria-label="Menu"><svg viewBox="0 0 28 28" aria-hidden="true" fill="#fff"><circle cx="7" cy="7" r="2.300"/><circle cx="14" cy="7" r="2.300"/><circle cx="21" cy="7" r="2.300"/><circle cx="7" cy="14" r="2.300"/><circle cx="14" cy="14" r="2.300"/><circle cx="21" cy="14" r="2.300"/><circle cx="7" cy="21" r="2.300"/><circle cx="14" cy="21" r="2.300"/><circle cx="21" cy="21" r="2.300"/></svg></button>
+<div id="dock" class="glass"><button id="me" type="button" aria-label="Your character"><img id="meimg" alt=""></button><div id="friends" aria-label="People near you"></div></div>
+<button id="act" type="button" hidden></button>
+<div id="hitfx" aria-hidden="true"></div><div id="brief" role="dialog" aria-label="Errand" hidden><div class="bx"><span class="pc"><img id="brface" alt=""></span><b id="brname"></b><p id="brtext" aria-live="polite"></p><form id="brform" hidden><input id="brin" type="text" maxlength="14" placeholder="Your name" autocomplete="off" autocapitalize="words" enterkeyhint="done" aria-label="Your name"><button type="submit">OK</button></form><i class="nx" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.200v13.600L19.200 12z" fill="#17230a" stroke="#17230a" stroke-width="4.400" stroke-linejoin="round"/></svg><span id="brgo">Start</span></i><i class="nx2" id="brno" hidden></i></div></div>
+<div id="errand" role="dialog" aria-label="Errand" hidden><div id="erfrost"></div><div id="erbend"></div></div>
+<canvas id="herotop" aria-hidden="true" hidden></canvas>
+<div id="count" aria-live="assertive" hidden></div>
+<div id="talk" class="panel" hidden><div id="who"></div><p id="say"></p><div id="opts"></div></div>
+<div id="chars" class="panel" hidden><header><span>Choose your character</span><button id="charx" type="button">Done</button></header><p>All free. You can change any time.</p><div id="charlist"></div></div>
+<div id="look" class="panel" hidden><header><span>Choose your backpack</span><button id="lookx" type="button">Done</button></header><p>All free. You can change it any time.</p><div id="packs"></div></div>
+<div id="places" hidden><button id="placex" type="button" aria-label="Close">×</button><div class="holo"><div id="placelist"></div></div></div></div></div>
+<div id="fade" aria-hidden="true"></div>
+<div id="dm" hidden><div class="dmwin" role="dialog" aria-label="Chat"><header><button id="dmback" type="button" aria-label="All chats">‹</button><span class="ring"><img id="dmface" alt=""></span><div class="who"><b id="dmname"></b><span>Active now</span></div><b class="title">Messages</b><button id="dmx" type="button" aria-label="Close">×</button></header><div id="dmlist" hidden></div><div id="dmthread"><div id="dmlog"></div><div id="dmquick"></div><form class="dmbar" id="dmform"><span class="cam"><svg viewBox="0 0 24 24"><path d="M4 8.5A2.500 2.500 0 0 1 6.500 6h1.700l1.300-2h5l1.300 2h1.700A2.500 2.500 0 0 1 20 8.500v8A2.500 2.500 0 0 1 17.500 19h-11A2.500 2.500 0 0 1 4 16.500z" fill="#fff"/><circle cx="12" cy="12.500" r="3.200" fill="#3f6df5"/></svg></span><input id="dmin" type="text" placeholder="Message…" autocomplete="off" enterkeyhint="send" aria-label="Message"><button id="dmsend" type="submit" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-5 16-3-7z" fill="#fff"/></svg></button></form></div></div></div>
+<div id="veil">Loading the city…</div>
 <script>/*BUNDLE*/</script>
 </body>
 </html>
