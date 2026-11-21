@@ -13,6 +13,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
+import { CONFIG } from './config.js';
+import * as logic from './logic.js';
 import carsGlb from './models/cars.glb';
 import cop1Glb from './models/cop1.glb';
 import cop2Glb from './models/cop2.glb';
@@ -2828,7 +2830,7 @@ window.addEventListener('keydown', (e) => { if (e.target && e.target.tagName ===
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 /* ---------------- the journey: money, a place to live, making it a home ---------------- */
-// Everyone starts with a backpack and one million in their own money. The first thing to do is
+// Everyone starts with a backpack and some money of their own (CONFIG.startMoney). The first thing to do is
 // find somewhere to live: three houses just along the street are for rent. You walk up, knock on
 // the gate, the landlord comes out and opens it, you agree the rent, and the door is yours to
 // walk through. The place is empty; whatever you buy for it comes out of your million.
@@ -2847,11 +2849,11 @@ const CUR = (() => { // which money to count in, from where the player's device 
 })();
 const cash = (n) => CUR.sym + Math.round(n).toLocaleString('en-US');
 const SAVE_KEY = 'hustle-save-v1';
-const game = { money: 1000000, curV: 1, home: -1, items: [], seenHome: false, pack: null, hero: 'leo', heroV: 2 };
+const game = { money: logic.freshGame(CONFIG), curV: 1, home: -1, items: [], seenHome: false, pack: null, hero: 'leo', heroV: 2 };
 try {
   if (location.hash.includes('new')) localStorage.removeItem(SAVE_KEY); // testing: #new starts again from nothing
   const sv = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-  if (sv && typeof sv.money === 'number' && Array.isArray(sv.items)) { Object.assign(game, sv); if (sv.heroV !== 2) { game.hero = 'leo'; game.heroV = 2; } if (sv.curV !== 1) { game.money = 1000000; game.curV = 1; } } // the move to naira: everyone starts again with a million // Leo became the main character; an older save moves over to him once
+  if (sv && typeof sv.money === 'number' && Array.isArray(sv.items)) { Object.assign(game, sv); if (sv.heroV !== 2) { game.hero = 'leo'; game.heroV = 2; } if (sv.curV !== 1) { game.money = CONFIG.startMoney; game.curV = 1; } game.money = logic.loadMoney(game.money, CONFIG); /* a broken save can never start below 0 */ } // the move to naira: everyone starts again with a million // Leo became the main character; an older save moves over to him once
 } catch (e) { /* no saved game: start fresh */ }
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(game)); } catch (e) { /* not remembered, that is all */ } }
 
@@ -3850,7 +3852,7 @@ function openErrand() {
   if (ui.busy) return; const o = job.offer = makeOffer(); if (!o) { note('No errands near here just now.', 3); return; }
   job.state = 'offer'; ui.busy = true; showBrief(); chime([660, 880], 'triangle', 0.06, 0.1, 0.05);
 }
-const latePenalty = (o) => Math.round(o.pay * 0.4 / 100) * 100;
+const latePenalty = (o) => Math.round(o.pay * CONFIG.lateShare / 100) * 100;
 function closeErrand() { errandEl.hidden = true; briefEl.hidden = true; clearInterval(briefTimer); ui.busy = false; if (job.state === 'offer') job.state = 'idle'; }
 const startErrand = () => { errandEl.hidden = true; job.state = 'count'; job.count = 3.999; ui.busy = true; countShow(3); };
 errandEl.addEventListener('click', (e) => { if (errandEl.dataset.swiped) return; // (a swipe is not a tap)
@@ -3955,7 +3957,7 @@ function hzSpawn() {
 }
 function hzSay(h) {
   const fee = Math.min(h.fee, Math.max(0, game.money)), away = () => { h.state = 'back'; ui.busy = false; hero.free = 6; },
-    pay = () => { game.money -= fee; gain(-fee, h.type === 'agbero' ? 'Agbero' : 'Police'); chime([392, 330], 'triangle', 0.1, 0.16, 0.07); save(); showMoney(); away(); };
+    pay = () => { const took = logic.spendUpTo(game.money, fee); game.money = took.money; gain(-took.paid, h.type === 'agbero' ? 'Agbero' : 'Police'); chime([392, 330], 'triangle', 0.1, 0.16, 0.07); save(); showMoney(); away(); };
   h.state = 'talk';
   if (h.type === 'agbero') tell('Oga! Nobody passes here free. Drop ' + cash(fee) + ' for the boys.', 'Pay ' + cash(fee), pay, { face: h.k.face, name: 'Agbero' });
   else tell('Stop there! Where are you rushing to? Give me ' + cash(fee) + ' and you can go.', 'Pay ' + cash(fee), pay, { face: h.k.face, name: 'Officer', noBtn: 'Wait', no: () => { ui.busy = false; h.state = 'hold'; h.t = 0; hero.free = 16; spend('The officer is checking you…', 9, () => { note('He lets you go.', 2.5); h.state = 'back'; }); } });
@@ -3989,7 +3991,6 @@ function hzTick(dt) {
 }
 // Knocked down by a car: you are thrown back and lie in the road for a moment, the errand in hand is lost and its level starts again,
 // and you are hurt (no running, no new errands) until you treat yourself from the hospital in the menu.
-const TREAT_FEE = 3000;
 function carHit(c) {
   if (hero.down > 0 || hero.safe > 0 || job.state === 'offer' || job.state === 'count' || locateRoom()) return;
   const dx = c.axis === 'z' ? 0 : c.dir, dz = c.axis === 'z' ? c.dir : 0;
@@ -4007,16 +4008,16 @@ function downTick(dt) {
     tell('Ouch! A car knocked me down. ' + (hero.lost ? 'I lost the parcel, so Level ' + L + ' starts again. ' : '') + 'I’m hurt. Tap the hospital in the menu to treat me.', 'OK'); }
 }
 function treat() { // from the hospital in the menu: pay, and you are well again
-  const fee = Math.min(TREAT_FEE, Math.max(0, game.money)); game.money -= fee; game.hurt = false; gain(-fee, 'Treated'); chime([523, 659, 784, 1047], 'triangle', 0.09, 0.2, 0.08); save(); $('hurt').hidden = !game.hurt; showMoney();
+  const took = logic.spendUpTo(game.money, CONFIG.treatFee), fee = took.paid; game.money = took.money; game.hurt = false; gain(-fee, 'Treated'); chime([523, 659, 784, 1047], 'triangle', 0.09, 0.2, 0.08); save(); $('hurt').hidden = !game.hurt; showMoney();
   job.nextAt = performance.now() + 3500;
 }
 function aim(name, x, z) { ui.dest = { name, x, z, errand: true }; mapT = 0; }
 function startBend(what) { job.bend = 1.7; job.bendFor = what; job.done = false; ui.busy = true; }
 function endErrand(paid, hit) { // paid, cancelled for being late, or lost because a car knocked you down
   const o = job.offer, J = game.job, was = job.state; job.state = 'idle'; ui.dest = null; mapT = 0; jobPin.visible = false; $('job').hidden = true;
-  if (paid) { game.money += o.pay; gain(o.pay, 'Delivered'); coinDrop(o.pay); J.done++; game.jobs = (game.jobs || 0) + 1;
-    const L = levelOf(J.level); if (J.done >= L.n) { const bonus = 5000 * J.level; J.level++; J.done = 0; game.money += bonus; setTimeout(() => { gain(bonus, 'Bonus'); coinDrop(bonus); }, 2300); } }
-  else { if (hit) J.done = 0; else { const fine = Math.min(latePenalty(o), Math.max(0, game.money)); game.money -= fine; gain(-fine, 'Cancelled'); chime([330, 247, 196], 'sawtooth', 0.14, 0.3, 0.07); } // knocked down: no fine, but the level starts again
+  if (paid) { game.money = logic.earn(game.money, o.pay); gain(o.pay, 'Delivered'); coinDrop(o.pay); J.done++; game.jobs = (game.jobs || 0) + 1;
+    const L = levelOf(J.level); if (J.done >= L.n) { const bonus = 5000 * J.level; J.level++; J.done = 0; game.money = logic.earn(game.money, bonus); setTimeout(() => { gain(bonus, 'Bonus'); coinDrop(bonus); }, 2300); } }
+  else { if (hit) J.done = 0; else { const took = logic.spendUpTo(game.money, latePenalty(o)), fine = took.paid; game.money = took.money; gain(-fine, 'Cancelled'); chime([330, 247, 196], 'sawtooth', 0.14, 0.3, 0.07); } // knocked down: no fine, but the level starts again
     if (parcel.visible) { const d = makeParcel(), held = was === 'deliver'; d.position.set(held ? hero.x + Math.sin(hero.heading) * 0.5 : parcel.position.x, held ? hero.y : parcel.position.y, held ? hero.z + Math.cos(hero.heading) * 0.5 : parcel.position.z); d.rotation.y = parcel.rotation.y; scene.add(d); dropped.push(d); parcel.visible = false; } } // the parcel is left where it is
 
   save(); job.offer = null; job.nextAt = performance.now() + (paid ? 3200 : 4200);
@@ -4176,13 +4177,13 @@ function makeNpc(st) {
 const npcSpot = (st) => (st.state === 'home' ? [2.0, 2.9] : st.state === 'wait' ? [st.sb - 1.0, 1.5] : [1.3, 0.62]); // by the door, at the gate, or standing aside once the place is yours
 function knock(st) { chime([170, 150, 170], 'triangle', 0.16, 0.09, 0.3); st.state = 'coming'; }
 function talkRent(st) {
-  const d = st.def, rentBtn = [`Rent it for ${cash(d.price)}`, () => rentIt(st), game.money < d.price], no = ['Not today', () => say(d.who, 'No problem. I am here whenever you are ready.', [['Goodbye', hush]])];
+  const d = st.def, rentBtn = [`Rent it for ${cash(d.price)}`, () => rentIt(st), !logic.canAfford(game.money, d.price)], no = ['Not today', () => say(d.who, 'No problem. I am here whenever you are ready.', [['Goodbye', hush]])];
   say(d.who, `Hello! Looking for a place to stay? This is a ${d.name.toLowerCase()}. ${d.about} The rent is ${cash(d.price)} for the year.`,
     [rentBtn, ['What is it like inside?', () => say(d.who, `${d.more} It comes empty, so you furnish it the way you like.`, [rentBtn, no])], no]);
 }
 function rentIt(st) {
-  const d = st.def; if (game.money < d.price || game.home >= 0) return;
-  game.money -= d.price; game.home = d.id; save(); chime([660, 880, 1320]); showMoney();
+  const d = st.def, took = logic.spend(game.money, d.price); if (!took.ok || game.home >= 0) return;
+  game.money = took.money; game.home = d.id; save(); chime([660, 880, 1320]); showMoney();
   st.state = 'home'; st.sign.visible = false; for (const p of st.sign.userData.posts || []) p.visible = false; if (st.rentPin) st.rentPin.visible = false;
   say(d.who, 'Welcome home! Here are your keys. The door is open, so go in and make the place yours.', [['Thank you', hush]]);
 }
@@ -4316,5 +4317,5 @@ function frame() {
   errandOverHead();
 }
 function loop() { frame(); requestAnimationFrame(loop); }
-if (location.hash.includes('dbg')) window.__dbg = { treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, step: (dt) => updatePeople(dt, camera.position), look: (y) => { camYaw = y; hero.heading = y; } }; // testing only
+if (location.hash.includes('dbg')) window.__dbg = { logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, step: (dt) => updatePeople(dt, camera.position), look: (y) => { camYaw = y; hero.heading = y; } }; // testing only
 requestAnimationFrame(loop);

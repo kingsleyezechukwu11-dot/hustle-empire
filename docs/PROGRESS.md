@@ -17,7 +17,7 @@ PM log. Statuses: todo / building / in review / passed / QA / done.
 ## Phase 1: economy and transport
 | Task | Status | Notes |
 |---|---|---|
-| 1.1 Config + logic modules, test runner, safe money functions, N100,000 start | todo | |
+| 1.1 Config + logic modules, test runner, safe money functions, N100,000 start | passed | Reviewer PASS, 48 unit tests. Follow-ups folded into 1.2: stuck keyboard keys (old bug), balance display clamp, zero-fee wording. |
 | 1.2 Transport picker: buy once, owned, greyed with shortfall, confirmation, counter animates down | todo | |
 | 1.3 Riding: vehicle appears beside you, mount / dismount, speeds, where each may go | todo | |
 | 1.4 Pay range N3,000 to N15,000 by distance and package | todo | |
