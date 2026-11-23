@@ -6,9 +6,9 @@ import { rideSpeed, footSpeed, rideTurn, mayGo, ZONES, rideStep, levelRules, tri
 
 const RIDES = rideIds(CONFIG), VEHICLES = RIDES.filter((r) => r !== 'walk'), within = (got, want, share) => Math.abs(got - want) <= want * share;
 
-/* ---- the owner's speeds: walk 1x, sprint 2.6x, bicycle 3.4x, scooter 5x, car 6.4x (raised by the owner twice on 2026-11-21; the walk itself is now 2 m/s) (within 5%) ---- */
+/* ---- the owner's speeds: walk 1x, sprint 2.6x, bicycle 5.4x, scooter 8.2x, car 10.5x (raised by the owner twice on 2026-11-21 and twice again on 2026-11-23; the walk itself is now 2 m/s) (within 5%) ---- */
 test('review: each way of travelling is the owner\'s multiple of walking speed', () => {
-  const walk = footSpeed(false, CONFIG), want = { bicycle: 3.4, scooter: 5, car: 6.4 };
+  const walk = footSpeed(false, CONFIG), want = { bicycle: 5.4, scooter: 8.2, car: 10.5 };
   assert(walk > 0); assert(within(rideSpeed('walk', CONFIG) / walk, 1, 0.05)); assert(within(footSpeed(true, CONFIG) / walk, 2.6, 0.05), 'sprint');
   for (const id in want) assert(within(rideSpeed(id, CONFIG) / walk, want[id], 0.05), id + ' is ' + rideSpeed(id, CONFIG) / walk + 'x');
 });

@@ -8,7 +8,7 @@ const T = CONFIG.transport;
 test('config: start money and prices are the brief\'s', () => {
   assertEqual(CONFIG.startMoney, 100000);
   assertEqual([T.walk.price, T.bicycle.price, T.scooter.price, T.car.price], [0, 25000, 60000, 400000]);
-  assertEqual([T.walk.speed, T.bicycle.speed, T.scooter.speed, T.car.speed], [1, 3.4, 5, 6.4]);
+  assertEqual([T.walk.speed, T.bicycle.speed, T.scooter.speed, T.car.speed], [1, 5.4, 8.2, 10.5]);
   assertEqual(T.walk.sprint, 2.6); assertEqual(T.car.turn, 0.55); assertEqual(T.car.bigPackages, true);
   assertEqual(CONFIG.pay, { min: 3000, max: 15000 }); assertEqual(CONFIG.treatFee, 3000); assertEqual(CONFIG.lateShare, 0.4);
 });

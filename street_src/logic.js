@@ -186,7 +186,7 @@ export function offerTerms(o, CONFIG) {
   const pay = Math.max(CONFIG.pay.min, Math.min(CONFIG.pay.max, Math.round(raw / R.round) * R.round));
   const ref = Math.max(0.1, rideSpeed(ride, CONFIG) * pos(r.pace, 1)), T = CONFIG.time;
   const onFoot = Math.max(0, num(o && o.walk)) / Math.max(0.1, pos(CONFIG.walkSpeed, 1));   /* the walk to where your ride stands, when it could not be brought to you */
-  const time = Math.max(T.round, Math.ceil(((d1 + d2) / ref * L.slack + T.fixed + onFoot) / T.round - 1e-9) * T.round);
+  const time = Math.max(T.round, Math.ceil(((d1 + d2) / ref * L.slack + T.fixed + Math.max(0, num(r.onOff)) + onFoot) / T.round - 1e-9) * T.round);   /* onOff: the seconds a ride takes to get on and off (a car's door, say), more of the trip the faster it goes */
   return { pay, time, pkg };
 }
 

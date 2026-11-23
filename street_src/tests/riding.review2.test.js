@@ -42,7 +42,7 @@ test('review 2: at levels 1 to 3 a plain walk still fits after one stop of 10 se
     assert(half + BEND + 20 <= clock('walk', level, B.near[1], B.far[1]), 'level ' + level + ': ' + (half + BEND + 20).toFixed(0) + ' s against ' + clock('walk', level, B.near[1], B.far[1])); }
 });
 test('review 2: the clock gets tighter with the level but never tighter than 1.05 x a plain walk, and vehicles get 1.5 to 2 x their top-speed time', () => {
-  for (let level = 1; level <= 15; level++) for (const ride of rideIds(CONFIG)) { const B = tripBands(level, ride, CONFIG), D = B.near[1] + B.far[1], x = clock(ride, level, B.near[1], B.far[1]) / (D / rideSpeed(ride, CONFIG));
+  for (let level = 1; level <= 15; level++) for (const ride of rideIds(CONFIG)) { const B = tripBands(level, ride, CONFIG), D = B.near[1] + B.far[1], x = (clock(ride, level, B.near[1], B.far[1]) - (CONFIG.transport[ride].onOff || 0)) / (D / rideSpeed(ride, CONFIG));   /* (2026-11-23: the seconds for getting on and off are set apart; at the owner's faster speeds they are a large share of a trip) */
     if (ride === 'walk') assert(x >= 1.05 && x <= 1.35, 'walk level ' + level + ': ' + x.toFixed(2)); else assert(x >= 1.5 && x <= 2.0, ride + ' level ' + level + ': ' + x.toFixed(2)); }
 });
 test('review 2: a ride left on the main road adds the walk to it to the clock, at walking pace', () => {

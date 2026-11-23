@@ -13,8 +13,11 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <style>
-  html,body{margin:0;height:100%;background:#cfe3f1;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-  #stage,#stage canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  html,body{margin:0;width:100%;height:100%;background:#86a9d6;overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  body{position:fixed;inset:0}
+  /* the picture covers the whole screen, edge to edge: also under a phone's browser bars and the notch, so no strip of empty page ever shows */
+  #stage{position:fixed;top:0;left:0;width:100vw;height:100vh;height:100lvh;overflow:hidden;background:#86a9d6}
+  #stage canvas{position:absolute;top:0;left:0;width:100%!important;height:100%!important;display:block}
   #joy{position:fixed;width:84px;height:84px;margin:-42px 0 0 -42px;border-radius:50%;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.45);pointer-events:none;opacity:.55}
   #joy.on{opacity:1}
   #hud{position:fixed;z-index:5;top:calc(12px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));max-width:min(520px,calc(50vw - 90px));display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;pointer-events:none;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff}

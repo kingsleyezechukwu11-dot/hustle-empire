@@ -51,13 +51,14 @@ export const CONFIG = {
      pivot = radians a second it can turn while standing still (a bicycle can be walked round; a scooter or car cannot);
      reverse = metres a second backwards (0 = cannot); trip = how much longer its errands are than the level's distances;
      pace = the share of its top speed the clock expects you to average (on foot: of walking speed, so above 1 means some running);
+     onOff = seconds added to its clock for getting on and off at both ends (the car's door takes longest);
      payRate = how much of the per-metre pay it earns (set so that each step up, walk < bicycle < scooter < car, earns about 15% more
      for a minute of play than the one before, while pay stays inside the range); cam = how far back the camera sits (1 = on foot). */
   transport: {
     walk: { name: 'Walk', price: 0, speed: 1, sprint: 2.6, trip: 0.7, pace: 1.25, payRate: 1, cam: 1, go: { road: true, pavement: true, alley: true, market: true, indoors: true } },
-    bicycle: { name: 'Bicycle', price: 25000, speed: 3.4, accel: 4, brake: 5, turnRate: 2.6, pivot: 0.9, reverse: 0, trip: 1.5, pace: 0.78, payRate: 0.52, cam: 1.1, go: { road: true, pavement: true, alley: true, market: false, indoors: false } },
-    scooter: { name: 'Scooter', price: 60000, speed: 5, accel: 6, brake: 8, turnRate: 2.4, pivot: 0, reverse: 0.8, trip: 2, pace: 0.78, payRate: 0.44, cam: 1.25, go: { road: true, pavement: false, alley: false, market: false, indoors: false } },
-    car: { name: 'Car', price: 400000, speed: 6.4, turn: 0.55, accel: 7, brake: 10, turnRate: 2.4, pivot: 0, reverse: 1.4, trip: 2.8, pace: 0.8, payRate: 0.36, cam: 1.6, bigPackages: true, go: { road: true, pavement: false, alley: false, market: false, indoors: false } },
+    bicycle: { name: 'Bicycle', price: 25000, onOff: 10, speed: 5.4, accel: 6.5, brake: 8, turnRate: 2.6, pivot: 0.9, reverse: 0, trip: 2.4, pace: 0.78, payRate: 0.36, cam: 1.1, go: { road: true, pavement: true, alley: true, market: false, indoors: false } },
+    scooter: { name: 'Scooter', price: 60000, onOff: 10, speed: 8.2, accel: 10, brake: 13, turnRate: 2.4, pivot: 0, reverse: 0.8, trip: 3.25, pace: 0.8, payRate: 0.29, cam: 1.25, go: { road: true, pavement: false, alley: false, market: false, indoors: false } },
+    car: { name: 'Car', price: 400000, onOff: 16, speed: 10.5, turn: 0.55, accel: 12, brake: 16, turnRate: 2.4, pivot: 0, reverse: 1.4, trip: 4.5, pace: 0.78, payRate: 0.26, cam: 1.6, bigPackages: true, go: { road: true, pavement: false, alley: false, market: false, indoors: false } },
   },
 
   /* ---- riding ----
@@ -66,8 +67,10 @@ export const CONFIG = {
      up by itself when its nose is blocked (the middle of a three-point turn); stuck = seconds held by a traffic car that is itself waiting for you before the ride is eased sideways (a plain queue just holds you); park = metres within which your ride is brought to you at the start; reach = metres from which you can
      get back on; autoOff = metres from the parcel or the door at which you get off by yourself once stopped; fade = seconds it
      takes to appear and to leave; stopped = metres a second that counts as standing still; unstick = radians a second it can be
-     worked round when jammed against a kerb; startGuard = milliseconds after buying during which Start ignores taps. */
-  ride: { turnFrom: 0.5, turnFull: 2.1, slowTurn: 0.4, backTime: 1.5, backDist: 3, stuck: 3, park: 12, reach: 2.2, autoOff: 9, fade: 0.6, stopped: 0.35, unstick: 0.9, startGuard: 400 },
+     worked round when jammed against a kerb; startGuard = milliseconds after buying during which Start ignores taps.
+     crash = metres a second above which running into a car throws you off a bicycle or scooter (a car just stops); fallDown = seconds you are
+     down, from the hit to back on your feet (the fall, lying, sitting up, standing); hitDown = the same when a car knocks you down on foot; fallThrow = metres you are thrown. You then walk back to it, pick it up and ride on: a crash does not end the errand. */
+  ride: { crash: 3.5, fallDown: 3.1, hitDown: 3.8, fallThrow: 1.6, turnFrom: 0.5, turnFull: 2.1, slowTurn: 0.4, backTime: 1.5, backDist: 3, stuck: 3, park: 12, reach: 2.2, autoOff: 9, fade: 0.6, stopped: 0.35, unstick: 0.9, startGuard: 400 },
 
   /* ---- being stopped for money (the old walk-up area boy / officer; Phase 3 replaces it) ---- */
   // perLeg = at most this many stops on the way to the pickup, and again on the way to the delivery. On foot you can get away: he must come
@@ -89,7 +92,7 @@ export const CONFIG = {
   //  your path and stops for blockTime seconds, at most once every blockEvery seconds, and gives the block up if you get blockFar away.
   //  pullOver = seconds stopped, while it is only asking, that count as pulling over. trapTime = seconds you must be standing still with it
   //  within stopNear metres to be CAUGHT once you have run: being blocked is not being caught, having nowhere left to go is.)
-  police: { patrolChance: 0.2, chase: { see: 34, chance: 0.7, hail: 4, hailPace: 0.85, speed: 11.6, accel: 6.5, brake: 11, turn: 1.9, stopped: 0.9, stopNear: 9, pullOver: 1.2, stopGap: 9, trapTime: 2.6,
+  police: { patrolChance: 0.2, chase: { see: 34, chance: 0.7, hail: 4, hailPace: 0.85, speed: 17.5, accel: 10.5, brake: 17, turn: 1.9, stopped: 0.9, stopNear: 9, pullOver: 1.2, stopGap: 9, trapTime: 2.6,
     passWide: 3.3, lead: 16, blockAhead: 8, blockNear: 16, blockTime: 2.4, blockEvery: 7, blockFar: 22, loseFar: 55, loseTime: 6, gone: 115, cool: 45, feeBase: 1000, feePerLevel: 500, fineMult: 2.5, round: 100 } },
 
   /* ---- stamina (Phase 3) ---- */

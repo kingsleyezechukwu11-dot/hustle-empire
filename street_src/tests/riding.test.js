@@ -8,7 +8,7 @@ const RIDES = rideIds(CONFIG), PKGS = Object.keys(CONFIG.packages), near = (a, b
 /* ---- speeds ---- */
 test('footSpeed: walk 2, sprint 5.2', () => { assertEqual(CONFIG.walkSpeed, 2); assertEqual(footSpeed(false, CONFIG), 2); assert(near(footSpeed(true, CONFIG), 5.2)); });
 test('rideSpeed: walking speed x each ride\'s multiple', () => {
-  assert(near(rideSpeed('walk', CONFIG), 2)); assert(near(rideSpeed('bicycle', CONFIG), 6.8)); assert(near(rideSpeed('scooter', CONFIG), 10)); assert(near(rideSpeed('car', CONFIG), 12.8));
+  assert(near(rideSpeed('walk', CONFIG), 2)); assert(near(rideSpeed('bicycle', CONFIG), 10.8)); assert(near(rideSpeed('scooter', CONFIG), 16.4)); assert(near(rideSpeed('car', CONFIG), 21));   /* raised about 30% and then 25% more by the owner on 2026-11-23 */
   for (const id of RIDES) assert(near(rideSpeed(id, CONFIG), CONFIG.walkSpeed * CONFIG.transport[id].speed));
   assertEqual(rideSpeed('rocket', CONFIG), 0); assertEqual(rideSpeed(undefined, CONFIG), 0); assertEqual(rideSpeed('toString', CONFIG), 0);
 });
