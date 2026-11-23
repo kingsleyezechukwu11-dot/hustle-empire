@@ -2814,7 +2814,7 @@ function updateTraffic(dt) {
     const ha0 = (c.axis === 'z' ? hero.z - z : hero.x - x) * c.dir - half, hl = Math.abs(c.axis === 'z' ? hero.x - x : hero.z - z); // you, standing in the lane
     let ha = ha0, inLane = false; // ... or riding in it, or what you ride left standing in it: each as long and as wide as it is
     for (const b of roadBlocks()) { if (!b.on) continue; const a = (c.axis === 'z' ? b.z - z : b.x - x) * c.dir - half, l = Math.abs(c.axis === 'z' ? b.x - x : b.z - z);
-      if (a > -1 - b.len && a - b.len < 14 && l < c.kind.halfW + 0.9 + b.wid && (!inLane || a - b.len < ha)) { ha = a - b.len; inLane = true; } }
+      if (a > -1 - b.len && a - b.len < 14 && l < c.kind.halfW + (ride.on && ride.id !== 'car' ? 0.3 : 0.9) + b.wid && (!inLane || a - b.len < ha)) { ha = a - b.len; inLane = true; } }
     c.see = inLane ? (c.see || 0) + dt : 0; // a driver needs a moment to notice someone who steps out
     if (c.wait > 0) { c.wait -= dt; want = 0; }
     if (inLane && (c.see > 0.45 || ha > 9 || hero.down > 0)) { want = Math.min(want, Math.max(0, (ha - 2.5) * 1.3)); c.held = c.v < 0.3 ? (c.held || 0) + dt : 0; if (c.held > 2) { horn(1); c.held = 0; } } // a driver you keep waiting sounds the horn
@@ -3400,6 +3400,17 @@ function updateDoing(dt) {
   if (doing.t > 0 && (doing.t -= dt) <= 0) { ui.busy = false; const f = doing.done; doing.done = null; if (f) f(); }
   if (doing.noteT > 0 && (doing.noteT -= dt) <= 0 && !ui.busy) setGoal('');
 }
+// Home, from the menu: you are done for the day. No more errands come up; the map leads you home; and once you are indoors you can rest
+// until morning, which fills your life again. (Resting needs no bed: you can rest in an empty house.)
+function goHome() {
+  if (!(game.home >= 0)) { note('Rent a house first: follow the map to one.', 4); return; }
+  if (job.state === 'pickup' || job.state === 'deliver' || job.state === 'count') { note('Finish this errand first, then head home.', 4); return; }
+  if (job.state === 'offer') closeErrand(); ui.homing = true; job.nextAt = 0; if (locateRoom()) { askRest(); return; } note('Heading home. Follow the map, and rest when you get in.', 4.5); chime([523, 659], 'triangle', 0.08, 0.14, 0.05);
+}
+function askRest() { ui.homing = false; tell('Home at last. Shall I rest for the day?', 'Rest', restDay, { noBtn: 'Not yet', no: () => { ui.busy = false; job.nextAt = performance.now() + 20000; } }); }
+function restDay() { // the screen goes dark, the night passes, and you wake with your life full
+  ui.busy = false; $('fade').classList.add('on'); spend('Resting…', 4.5, () => { $('fade').classList.remove('on'); game.life = 100; game.lifeAt = Date.now(); game.rested = (game.rested || 0) + 1; save(); lifeShown = -1; chime([523, 659, 784, 1047], 'triangle', 0.09, 0.2, 0.07); note('Good morning! You are rested and ready.', 4); job.nextAt = performance.now() + 6000; });
+}
 function homeSpots(st) { // [x, z, level, reach, label, what happens] in the house's own measure
   const pl = st.plan, has = (id) => st.furn.has(id), out = [], put = pl.put, lifeUp = (n) => { game.life = Math.min(100, (game.life || 0) + n); save(); };
   if (has('bed')) out.push([put.bed[0], put.bed[1], put.bed[3], 2.1, 'Sleep', () => { $('fade').classList.add('on'); spend('Sleeping…', 4, () => { $('fade').classList.remove('on'); chime([523, 659, 784]); note('You slept well and feel rested.'); }); }]);
@@ -3865,12 +3876,12 @@ function setRing() {
 function nearestPerson() { let best = null; for (const p of people) { if (!p.obj.parent) continue; p.obj.getWorldPosition(_v); const far = (_v.x - hero.x) ** 2 + (_v.z - hero.z) ** 2; if (far < 18 * 18 && (!best || far < best.far)) best = { p, far }; } return best && best.p; }
 function openPlaces() {
   if (ui.busy) return; ui.busy = true;
-  $('placelist').replaceChildren(...PLACES.map((p) => { const at = p.at(), who = p.chat && nearestPerson(), b = document.createElement('button'); b.type = 'button'; b.disabled = !at;
+  $('placelist').replaceChildren(...PLACES.map((p) => { const at = p.at(), who = p.chat && nearestPerson(), b = document.createElement('button'); b.type = 'button'; b.disabled = !at && p.id !== 'home';   /* (Home always answers: with no house yet it tells you to rent one) */
     const ic = document.createElement('span'), app = APP[p.id] || APP.home, cc = new THREE.Color(app[0]), rgb = `${Math.round(cc.r * 255)},${Math.round(cc.g * 255)},${Math.round(cc.b * 255)}`; ic.className = 'ic'; ic.style.setProperty('--c', rgb); ic.style.setProperty('--g', MENU_GRADS[PLACES.indexOf(p) % MENU_GRADS.length]); ic.innerHTML = ART_ICONS[p.id] || FLAT_ICONS[p.id] || appIcon(p.id);
     const icw = document.createElement('span'); icw.className = 'icw'; icw.append(ic); // (the wrapper carries the shadow, since the icon itself is cut to shape)
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.name;
     b.append(icw, nm); // just the icon and its name
-    b.addEventListener('click', () => { if (ring.moved > 8) return; closePlaces(); if (p.errand) { openErrand(); return; } if (p.id === 'hospital' && game.hurt) { treat(); return; } if (p.chat) { if (who) chatWith(who); else note('No one is near enough to chat with.'); return; } ui.dest = p.id === 'home' ? null : { name: p.name, x: at[0], z: at[1] }; }); return b; }));
+    b.addEventListener('click', () => { if (ring.moved > 8) return; closePlaces(); if (p.errand) { openErrand(); return; } if (p.id === 'hospital' && game.hurt) { treat(); return; } if (p.chat) { if (who) chatWith(who); else note('No one is near enough to chat with.'); return; } if (p.id === 'home') goHome(); ui.dest = p.id === 'home' ? null : { name: p.name, x: at[0], z: at[1] }; }); return b; }));
   ring.at = 0; ring.v = 0; ring.free = false; $('places').classList.remove('dragging'); setRing(); $('places').hidden = false;
 }
 function closePlaces() { $('places').hidden = true; ui.busy = false; }
@@ -4612,7 +4623,7 @@ function errandTick(dt) {
   for (let i = dropped.length - 1; i >= 0; i--) if (Math.hypot(dropped[i].position.x - hero.x, dropped[i].position.z - hero.z) > 70) { scene.remove(dropped[i]); dropped.splice(i, 1); }
   if (job.state === 'idle') { // the next errand comes to your screen by itself: the first one soon after you arrive, the rest after each delivery
     if (!job.auto && settled && performance.now() - T0 > 9000) { job.auto = true; job.nextAt = performance.now() + 600; }
-    if (job.nextAt && performance.now() > job.nextAt && !ui.busy && !game.hurt && $('places').hidden && ADDR.size > 3 && !locateRoom()) { job.nextAt = 0; openErrand(); }
+    if (job.nextAt && performance.now() > job.nextAt && !ui.busy && !game.hurt && $('places').hidden && ADDR.size > 3 && !locateRoom() && !ui.homing) { job.nextAt = 0; openErrand(); }
     return; }
   if (job.state === 'offer') return;
   const o = job.offer;
@@ -4883,14 +4894,26 @@ function rideDrive(dt, mx, my, mag, fx, fz) { // the stick says where you want t
     else if (Math.hypot(ride.x - ox, ride.z - oz) < Math.abs(d) * 0.3 || (diff > 1 && dir > 0)) jam = true;                                                 /* nose-on to the edge (sliding gets it nowhere), or the edge is stopping a turn it wants to make */                                                                          /* nose-on to the edge: sliding gets it nowhere */
   }
   ride.h = Math.atan2(Math.sin(ride.h), Math.cos(ride.h));
-  const vHit = Math.abs(ride.v); hero.x = ride.x; hero.z = ride.z; pushOut(); pushOffCars(D.side + 0.15, D.nose + 0.15);
-  if (vHit > C.crash && (carTouch(D.side + 0.2, D.nose + 0.2) || parkedTouch(hero.x, hero.z, D.side + 0.2, D.nose + 0.2))) {   /* a moving car or a parked one */   /* ran into a car: on two wheels you come off; in the car you stop dead with a thump */
-    if (rideFall(-Math.sin(ride.h), -Math.cos(ride.h))) { hero.x = ride.x; hero.z = ride.z; return; }
-    if (id === 'car') { ride.v = 0; chime([90, 70], 'sawtooth', 0.03, 0.18, 0.14); } }                                                            /* trees, poles, people and cars are as solid as they are on foot: always */
-  if (hero.x !== ride.x || hero.z !== ride.z) { if (free(hero.x, hero.z, ride.h)) { ride.x = hero.x; ride.z = hero.z; } else { ride.x = ox; ride.z = oz; } }
+  // A crash is a real touch, nose first: the very front of what you ride has reached a car's bodywork while you were closing on it fast.
+  // Riding close beside a car, or brushing along its side, is not a crash: you just slide past.
+  { const fxh = Math.sin(ride.h), fzh = Math.cos(ride.h), nx0 = ride.x + fxh * D.nose, nz0 = ride.z + fzh * D.nose; let hit = false;
+    if (ride.v > C.crash) { for (const o of cars) { const [cx, cz] = carPos(o), a = o.axis === 'z' ? nz0 - cz : nx0 - cx, l = o.axis === 'z' ? nx0 - cx : nz0 - cz; if (Math.abs(a) > o.kind.half || Math.abs(l) > o.kind.halfW) continue;
+          const closing = ride.v - o.v * o.dir * (o.axis === 'z' ? fzh : fxh); if (closing > C.crash) { hit = true; break; } }
+      if (!hit && parkedTouch(nx0, nz0, 0, 0)) hit = true; }
+    if (hit) { if (rideFall(-fxh, -fzh)) { ride.x = ox; ride.z = oz; hero.x = ox; hero.z = oz; return; } if (id === 'car') { ride.v = 0; chime([90, 70], 'sawtooth', 0.03, 0.18, 0.14); } } }
+  const pad = id === 'car' ? 0.15 : 0.04;                                                                                                          /* (two wheels can pass a hand's width from a car) */
+  hero.x = ride.x; hero.z = ride.z; pushOut(); pushOffCars(D.side + pad, D.nose + pad);                                                            /* trees, poles, people and cars are as solid as they are on foot: always */
+  if (hero.x !== ride.x || hero.z !== ride.z) { // pushed aside by something solid: it goes where it was pushed if it can, else it keeps what it can of its move (never a dead stop for a nudge)
+    if (free(hero.x, hero.z, ride.h)) { ride.x = hero.x; ride.z = hero.z; } else if (free(hero.x, ride.z, ride.h)) ride.x = hero.x; else if (free(ride.x, hero.z, ride.h)) ride.z = hero.z; else { ride.x = ox; ride.z = oz; } }
+  // Up against a car on two wheels: it eases itself round, towards the side with room, instead of stalling behind it until you wrestle it free.
+  if (id !== 'car' && pushing && dir > 0) { hero.x = ride.x; hero.z = ride.z; const q = carTouch(D.side + 0.12, D.nose + 0.35) || parkedTouch(ride.x, ride.z, D.side + 0.12, D.nose + 0.35);
+    if (q) { const qx = q.obj ? carPos(q)[0] : q.x, qz = q.obj ? carPos(q)[1] : q.z, rx = Math.cos(ride.h), rz = -Math.sin(ride.h), want2 = ride.easeT > 0 ? ride.easeSide : ((ride.x - qx) * rx + (ride.z - qz) * rz) >= 0 ? 1 : -1, st = 2.6 * dt;   /* the side it has chosen is kept (else it would dither between the two) */
+      for (const sg of [want2, -want2]) { const ax = ride.x + rx * sg * st, az = ride.z + rz * sg * st; if (free(ax, az, ride.h)) { ride.x = ax; ride.z = az; ride.eased = 0.4; ride.easeSide = sg; ride.easeT = 1.5; break; } } } }
+  if (ride.easeT > 0) ride.easeT -= dt;
+  if (ride.eased > 0) ride.eased -= dt;
   hero.x = ride.x; hero.z = ride.z; hero.heading = ride.h; const gone = Math.hypot(ride.x - ox, ride.z - oz); ride.run += gone; if (ride.v < 0) ride.backRun += gone;
   // Its speed is what it really did this frame: held behind a queue, or against a kerb, the wheels stop and the engine drops.
-  if (dt > 0) { const net = ((ride.x - ox) * Math.sin(ride.h) + (ride.z - oz) * Math.cos(ride.h)) / dt; if (jam || Math.abs(net) < Math.abs(ride.v) * 0.6) ride.v = clamp(net, Math.min(0, ride.v), Math.max(0, ride.v)); }
+  if (dt > 0) { const net = ((ride.x - ox) * Math.sin(ride.h) + (ride.z - oz) * Math.cos(ride.h)) / dt; if (jam || Math.abs(net) < Math.abs(ride.v) * 0.6) ride.v = clamp(ride.eased > 0 && !jam ? Math.max(net, Math.min(ride.v, 2.2)) : net, Math.min(0, ride.v), Math.max(0, ride.v)); }   /* (easing round a car it keeps a little way on) */
   if (jam && pushing && T.reverse > 0) { if (dir < 0) ride.back = 0; else if (diff > 0.4 && !(ride.back > 0)) { ride.back = C.backTime; ride.backRun = 0; } }   /* nose against the kerb and you want to go elsewhere: back off a little, then round */
   ride.stuckT = pushing && !jam && gone < 0.15 * dt ? ride.stuckT + dt : 0;                                                                           /* (held by something other than the edge of the road) */
   if (ride.stuckT > C.stuck) { // No progress for a while. Behind a queue (a red light, say) you simply wait: traffic is never passed through. Only when the car holding you is itself
@@ -5142,6 +5165,8 @@ function updateJourney(dt) {
     }
   }
   if (inRoom && !game.seenHome) { game.seenHome = true; save(); }
+  if (inRoom && ui.homing && !ui.busy) askRest();   /* you came home to rest */
+  if (inRoom && !act && !ui.busy && game.home >= 0) act = { label: 'Rest for the day', run: restDay };   /* anywhere in your own house with nothing else to hand */
   const hm = RENT[game.home];
   const lit = inRoom && homeSpot(hero.x, hero.z);
   if (hm && lit && lit.rect) { const r = lit.rect; _v.set(hm.s * (F + hm.sb + 0.22 + clamp((r.z0 + r.z1) / 2, hero_hz(hm) - 2.5, hero_hz(hm) + 2.5)), lit.y / HS + 2.45, clamp((r.x0 + r.x1) / 2, hero_hx(hm) - 2.5, hero_hx(hm) + 2.5)).applyMatrix4(hm.world); homeLight.position.lerp(_v, homeLight.intensity < 1 ? 1 : Math.min(1, dt * 6)); } // the light of whichever room you are standing in
@@ -5256,7 +5281,7 @@ function sharpness(now) {
   if (pr !== SHARP.pr) { SHARP.pr = pr; renderer.setPixelRatio(pr); viewAt = ''; fitCamera(); }
 }
 function loop(now) { now = now || performance.now(); fitRes(now); sharpness(now); frame(); requestAnimationFrame(loop); }
-if (location.hash.includes('dbg')) window.__dbg = { SHARP, rideFall, carDoorSpot, carSteps, join, openJoin, joinNext, CAR_PAINTS, chase, chaseTick, chaseAim, VEH, STYLES, POLICE_CARS, setStyle, styleOf, applyStyle, logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, rideModel, rideTris, makeRideArt, RIDE_PIC, RIDE_TPL, openPicker, pickAsk, pickBuy, pickStart, moneyCount, save, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, ride, RIDE_DIM, zoneAt, rideFits, rideBad, ridePlan, rideLead, stancePace, rideClear, STREETS, RUN_AT, cam: (y) => { camYaw = y; }, rideObj, rideCall, rideOn, rideOff, rideEnd, kerbSpot, makeOffers, endErrand, closeErrand, becomeHero, joy, keys, parcel, HEROES, get camYaw() { return camYaw; },
+if (location.hash.includes('dbg')) window.__dbg = { SHARP, goHome, restDay, rideFall, carDoorSpot, carSteps, join, openJoin, joinNext, CAR_PAINTS, chase, chaseTick, chaseAim, VEH, STYLES, POLICE_CARS, setStyle, styleOf, applyStyle, logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, rideModel, rideTris, makeRideArt, RIDE_PIC, RIDE_TPL, openPicker, pickAsk, pickBuy, pickStart, moneyCount, save, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, ride, RIDE_DIM, zoneAt, rideFits, rideBad, ridePlan, rideLead, stancePace, rideClear, STREETS, RUN_AT, cam: (y) => { camYaw = y; }, rideObj, rideCall, rideOn, rideOff, rideEnd, kerbSpot, makeOffers, endErrand, closeErrand, becomeHero, joy, keys, parcel, HEROES, get camYaw() { return camYaw; },
   quickRun: (id = 'walk') => { /* testing: own this ride (bought the proper way, with money given for it), skip the cards and begin the countdown */
     if ((job.state !== 'idle' && job.state !== 'offer') || !CONFIG.transport[id]) return false; closeErrand(); job.offers = makeOffers(); if (!job.offers || !job.offers[id]) return false;
     job.offer = job.offers[id]; job.state = 'offer'; ui.busy = true; job.pick = RIDES.indexOf(id); errandEl.hidden = false; bendErrand();

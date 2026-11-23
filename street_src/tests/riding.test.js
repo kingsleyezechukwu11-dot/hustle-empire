@@ -241,7 +241,7 @@ test('earnings: walk < bicycle < scooter < car for a minute of play, each step a
 });
 test('main.js: traffic is never made passable to a ride, and you never step on from a yard or through a fence', () => {
   const src = readText('street_src/main.js'); if (src === null) return;
-  assert(src.indexOf('ghost') < 0, 'something still lets a ride pass through traffic'); assert(src.indexOf('pushOut(); pushOffCars(D.side + 0.15, D.nose + 0.15);') > 0, 'cars are not always solid to the ride');
+  assert(src.indexOf('ghost') < 0, 'something still lets a ride pass through traffic'); assert(src.indexOf('pushOut(); pushOffCars(D.side + pad, D.nose + pad);') > 0, 'cars are not always solid to the ride');
   assert(src.indexOf('if (c && c.see > 0)') > 0, 'the release is not limited to a car that is itself waiting for you');
   assert(src.indexOf('q.yard || !rideClear(px, pz, ride.x, ride.z)') > 0, 'rideSide offers a spot in a yard or behind a fence'); assert(src.indexOf('rideClear(hero.x, hero.z, p[0], p[1]) && rideClear(p[0], p[1], ride.x, ride.z)') > 0, 'rideAct does not check the whole way onto the ride');
 });
