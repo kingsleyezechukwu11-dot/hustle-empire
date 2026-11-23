@@ -1642,7 +1642,7 @@ function runLot(c, type, prevH, num) {
   noteAddress(c, type, num);
   if (BLD_FOR[type] && !c.rent) { const out = c.D.residential ? (type === 'shop' ? builtShop(c) : type === 'modern' ? builtApartment(c) : builtHome(c)) : realBuilding(c, type); if (out) { if (num) numberPlate(c, num); return out.H; } }
   if (num) numberPlate(c, num);
-  if (location.hash.includes('dbg')) (window.__lots = window.__lots || []).push({ type, s: c.s, w: c.w, g: c.g, m: c.B.frame.clone() }); // testing only
+  if (location.hash.includes('lots')) (window.__lots = window.__lots || []).push({ type, s: c.s, w: c.w, g: c.g, m: c.B.frame.clone() }); // testing only
   const out = BUILD[type](c), r = c.r;
   if (out.mural && out.H > prevH + 6 && out.H > 11 && r() < 0.55) { // mural on the exposed side wall
     const mw = Math.min(out.d - 1.5, 7), mh = Math.min(out.H - prevH - 1.5, 10);
@@ -2315,7 +2315,7 @@ const HEROES = {}, HERO_LIST = [['leo', 'Leo'], ['nathan', 'Nathan'], ['roxy', '
 function becomeHero(id) {
   const H = HEROES[id] || HEROES.leo || HEROES.nathan; if (!H) return;
   if (hero.mixer) { hero.mixer.stopAllAction(); hero.mixer.uncacheRoot(hero.model); }
-  hero.obj.clear();
+  freeSkins(hero.obj); hero.obj.clear();
   const k = H.k, look = k.makeLook(H.look), m = SkeletonUtils.clone(k.root);
   m.traverse((o) => { if (o.isMesh) { o.material = look.get(o.material) || o.material; o.boundingSphere = o.boundingSphere && o.boundingSphere.clone(); o.frustumCulled = false; } });
   hero.baseY = m.position.y; hero.baseX = m.position.x; hero.baseZ = m.position.z; m.scale.multiplyScalar(k.scale * 1.01); m.position.y += k.lift; hero.obj.add(m); addShadow(m, hero.obj); m.traverse((o) => { if (o.isMesh) o.layers.enable(1); }); hero.mixer = new THREE.AnimationMixer(m); hero.model = m; hero.who = HEROES[id] ? id : (HEROES.leo ? 'leo' : 'nathan');
@@ -2389,11 +2389,15 @@ function populate(piece) { // put walkers on both sidewalks of a road piece
   }
   for (const l of piece.lanePieces) populate(l);
 }
+// A person taken out of the game: every copy of a skeleton was given its own small picture of its bone positions on the graphics chip;
+// it is let go here, or those pictures pile up as you travel (thousands of them) and the game slows down and, on a phone, runs out of memory.
+function freeSkins(root) { if (!root) return; const sk = new Set(); root.traverse((o) => { if (o.isSkinnedMesh && o.skeleton) sk.add(o.skeleton); }); for (const k of sk) k.dispose(); }
 function dropPeople(piece) {
   for (let i = people.length - 1; i >= 0; i--) {
     const q = people[i]; if (q.piece !== piece && q.piece.parent !== piece) continue;
     q.mixer.stopAllAction(); q.mixer.uncacheRoot(q.mixer.getRoot());
     if (q.obj.parent) q.obj.parent.remove(q.obj); // take them out of the scene too, or they are left standing there frozen
+    freeSkins(q.obj);   /* (its light and full bodies share the one skeleton) */
     people.splice(i, 1);
   }
 }
@@ -2936,7 +2940,8 @@ function updateCells() { // build the city around you as you move, and let go of
   }
   for (const job of jobs) job.d = cellDist(job.cell.i, job.cell.j);
   jobs.sort((a, b) => a.d - b.d);
-  if ((frameNo % 8) === 0) for (const cell of cells.values()) { const on = cellDist(cell.i, cell.j) < scene.fog.far + 4; if (cell.shown !== on) { cell.shown = on; for (const g of cell.groups) g.visible = on; } }   /* a block wholly in the haze is not drawn at all */
+  if ((frameNo % 8) === 0) for (const cell of cells.values()) { const dd = cellDist(cell.i, cell.j), on = dd < scene.fog.far + 4; if (cell.shown !== on) { cell.shown = on; for (const g of cell.groups) g.visible = on; }
+    const cast = HQ && dd < 45; if (cell.cast !== cast) { cell.cast = cast; for (const g of cell.groups) g.traverse((o) => { if (!o.isMesh) return; if (o.userData.cs === undefined) o.userData.cs = o.castShadow; o.castShadow = cast && o.userData.cs; }); renderer.shadowMap.needsUpdate = true; } }   /* only the blocks round you cast shadows: the sun's shadows of streets a long way off are lost in the haze anyway, and drawing them nearly doubled the work */   /* a block wholly in the haze is not drawn at all */
   // Building happens a little at a time: a few milliseconds each frame (more while the loading screen is up), one house or one material per
   // step, so a new block never freezes the picture. Anything right beside you (a jump, the first street) is still finished at once.
   { const t0 = realNow(), budget = settled ? (PHONE ? 3.5 : 5) : 120;
@@ -3063,6 +3068,10 @@ const RENTALS = [ // w = width of the plot, hw and d = the house itself (as plan
 const RENT = [null, null, null]; // the three houses as they stand in the world right now (rebuilt whenever their street is)
 const GATE_GEO = mergeGeometries([[0.07, 2.0, 0.07, 1.0, 0.035], [0.07, 2.0, 0.07, 1.0, 1.765], ...Array.from({ length: 9 }, (_, i) => [0.04, 0.17, 1.8, 0.14 + i * 0.215, 0.9])].map(([a, b, c, y, z]) => new THREE.BoxGeometry(a, b, c).translate(0, y, z))); // a steel gate of horizontal slats, hinged at one edge
 const DOOR_H = 2.12, DOOR_GEO = new THREE.BoxGeometry(0.06, DOOR_H, 1.4).translate(0, DOOR_H / 2, 0.7);
+// The door model is a leaf in its frame. Only the leaf swings: doorPart gives a copy with just the leaf, or just the frame (the frame is the
+// smaller of the model's two parts).
+function doorPart(obj, want) { const o = obj.clone(), ms = []; o.traverse((m) => { if (m.isMesh) ms.push(m); }); if (ms.length < 2) return want === 'leaf' ? o : new THREE.Group();
+  ms.sort((a, b) => a.geometry.attributes.position.count - b.geometry.attributes.position.count); ms.forEach((m, i) => { m.visible = want === 'frame' ? i === 0 : i > 0; }); return o; }
 const doorMat = (col, indoors) => new THREE.MeshLambertMaterial({ map: canvasTex(128, 256, (g, w, h) => { // a panelled front door: four sunk panels, a letterbox and a brass handle
   g.fillStyle = col; g.fillRect(0, 0, w, h);
   for (const [x, y, pw, ph] of [[14, 14, 44, 92], [70, 14, 44, 92], [14, 142, 44, 96], [70, 142, 44, 96]]) {
@@ -3324,8 +3333,10 @@ function rental(c) {
   const rg = new THREE.Group(); rg.applyMatrix4(B.frame); g.add(rg); g.updateMatrix();
   const world = new THREE.Matrix4().multiplyMatrices(g.matrix, B.frame), mine = game.home === def.id;
   const gate = gateLeaf(); gate.position.set(X(0.15), 0.3, -GATE_W / 2);
-  const door = new THREE.Group(); door.position.set(X(sb + 0.11), FLOOR, -0.7); // hinged at one edge of the doorway
-  FMODEL.door.ready.then((q) => { const o = q.obj.clone(), hold = new THREE.Group(), bb = new THREE.Box3().setFromObject(o); o.scale.x *= 1.46 / Math.max(0.1, bb.max.x - bb.min.x); o.scale.y *= DOOR_H / 2.26; hold.rotation.y = -Math.PI / 2; hold.position.z = 0.7; hold.add(o); door.add(hold); });
+  const LEAF = 0.59, door = new THREE.Group(), doorFrame = new THREE.Group(); door.position.set(X(sb + 0.11), FLOOR, -LEAF); doorFrame.position.set(X(sb + 0.11), FLOOR, 0); rg.add(doorFrame); // the leaf is hinged at its own edge; the frame round it stays in the wall
+  FMODEL.door.ready.then((q) => { const fit = (o) => { const bb = new THREE.Box3().setFromObject(q.obj); o.scale.x *= 1.46 / Math.max(0.1, bb.max.x - bb.min.x); o.scale.y *= DOOR_H / 2.26; return o; };
+    const hold = new THREE.Group(); hold.rotation.y = -Math.PI / 2; hold.position.z = LEAF; hold.add(fit(doorPart(q.obj, 'leaf'))); door.add(hold);
+    const still = new THREE.Group(); still.rotation.y = -Math.PI / 2; still.add(fit(doorPart(q.obj, 'frame'))); doorFrame.add(still); });
   const sign = new THREE.Mesh(PLANE, rentSign(def, mine)); sign.scale.set(1.6, 1.2, 1); sign.position.set(X(-0.5), 2.15, GATE_W / 2 + 1.6); sign.rotation.y = -s * Math.PI / 2;
   for (const q of [-0.68, 0.68]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.8, 0.07), mat('#e8e9ec')); post.position.set(X(-0.4), 1.4, GATE_W / 2 + 1.6 + q); /* behind the board, not across its face */ post.castShadow = HQ; rg.add(post); if (mine) post.visible = false; sign.userData.posts = (sign.userData.posts || []).concat(post); } // the board stands on two posts at the pavement edge
   for (const m of [gate, door, sign]) { m.castShadow = m.receiveShadow = HQ; rg.add(m); } sign.visible = !mine; // once it is yours the board comes down: the green pin marks it
@@ -3334,7 +3345,8 @@ function rental(c) {
     let dir = 1; for (const [wa, wat, , , wl, ...gaps] of plan.walls) if (wa === along && wat === at && wl === L) for (const [g0, g1] of gaps) { if (Math.abs(hinge - g1) < 0.08) dir = -1; }
     const pivot = new THREE.Group(), leaf = new THREE.Group(); // a real panelled door, brought to the width of its doorway
     if (along === 'z') { leaf.position.set(s * dir * gw / 2, 0, 0); pivot.position.set(X(sb + 0.22 + hinge), FLOOR + L * STOREY, at); } else { leaf.position.set(0, 0, dir * gw / 2); leaf.rotation.y = Math.PI / 2; pivot.position.set(X(sb + 0.22 + at), FLOOR + L * STOREY, hinge); }
-    FMODEL.door.ready.then((q) => { const o = q.obj.clone(); box3.setFromObject(o); o.scale.x *= (gw + 0.06) / Math.max(0.1, box3.max.x - box3.min.x); leaf.add(o); });
+    FMODEL.door.ready.then((q) => { box3.setFromObject(q.obj); const k = (gw + 0.06) / Math.max(0.1, box3.max.x - box3.min.x), o = doorPart(q.obj, 'leaf'), fr = doorPart(q.obj, 'frame'); o.scale.x *= k; fr.scale.x *= k; leaf.add(o);
+      const stay = new THREE.Group(), in2 = new THREE.Group(); stay.position.copy(pivot.position); in2.position.copy(leaf.position); in2.rotation.copy(leaf.rotation); in2.add(fr); stay.add(in2); rg.add(stay); });   /* the frame stays in its wall; only the leaf swings */
     const swing = (along === 'z' ? -side * s * dir : s * side * dir) * Math.PI / 2;
     pivot.add(leaf); pivot.rotation.y = swing; rg.add(pivot);
     doors.push({ pivot, swing, along, at, hinge, side, dir, L, gw, open: true, t: 1 });
@@ -3367,7 +3379,7 @@ function homeSpot(x, z) {
       if (dep > 0.65 && dep < sb - 0.45 && al < st.w / 2 - 0.6) return { y: 0.29 * HS, yard: st };
     }
     if (st.doorOpen > 0.85) {
-      if (hero.level === 0 && hz >= -0.67 && hz <= 0.5 && al < 0.4) return { y: FLOOR * HS, door: st, level: 0 };
+      if (hero.level === 0 && hz >= -0.67 && hz <= 0.5 && al < 0.4 && (st.doorT > 0.6 || st.go)) return { y: FLOOR * HS, door: st, level: 0 };   /* the doorway: only while the door stands open */
       for (const r of st.walk) {
         if (lat < r.x0 || lat > r.x1 || hz < r.z0 || hz > r.z1) continue;
         if (r.stairs) { const f = clamp((hz - r.s0) / (r.s1 - r.s0), 0, 1), y = FLOOR + (hz < r.s0 ? 0 : Math.min(STOREY, (f * r.steps + 1) * STOREY / r.steps)); return { y: y * HS, room: st, rect: r, ceil: (y + 2.5) * HS, level: f >= 0.5 ? 1 : 0 }; } // a steady climb along the front edges of the steps: feet on the stairs, never in them
@@ -3402,6 +3414,20 @@ function updateDoing(dt) {
 }
 // Home, from the menu: you are done for the day. No more errands come up; the map leads you home; and once you are indoors you can rest
 // until morning, which fills your life again. (Resting needs no bed: you can rest in an empty house.)
+// Furniture, from the menu: a list of things for your house. Tap a price to buy; it is put in its place at home straight away.
+const furnEl = document.getElementById('furn');
+function furnRows() { const own = new Set(game.items || []);
+  return CATALOG.map((c) => { const has = own.has(c.id), need = c.needs && !own.has(c.needs), short = !logic.canAfford(game.money, c.price);
+    return `<div class="fr${has ? ' has' : ''}"><span class="fn">${esc(c.name)}${need && !has ? `<i>Needs a ${esc((CATALOG.find((q) => q.id === c.needs) || {}).name || c.needs).toLowerCase()}</i>` : ''}</span>${has ? '<b class="ok">Owned</b>' : `<button type="button" data-f="${c.id}"${need || short ? ' disabled' : ''}>${esc(cash(c.price))}</button>`}</div>`; }).join(''); }
+function openFurn() {
+  if (!(game.home >= 0)) { note('Rent a house first, then furnish it.', 4); return; } if (ui.busy) return; ui.busy = true;
+  $('furnbal').textContent = cash(game.money); $('furnlist').innerHTML = furnRows(); furnEl.hidden = false; chime([660, 880], 'triangle', 0.06, 0.1, 0.05);
+}
+function closeFurn() { furnEl.hidden = true; ui.busy = false; }
+furnEl.addEventListener('click', (e) => { if (e.target === furnEl || e.target.closest('#furnx')) { closeFurn(); return; } const b = e.target.closest('[data-f]'); if (!b || b.disabled) return;
+  const c = CATALOG.find((q) => q.id === b.dataset.f); if (!c || (game.items || []).includes(c.id)) return; const was = game.money, took = logic.spend(game.money, c.price); if (!took.ok) return;
+  game.money = took.money; game.items = (game.items || []).concat(c.id); const st = RENT[game.home]; if (st) addFurniture(st, c.id); save();
+  moneyCount(was - (ui.hold || 0)); gain(-c.price, c.name); chime([523, 659, 784], 'triangle', 0.07, 0.14, 0.06); $('furnbal').textContent = cash(game.money); $('furnlist').innerHTML = furnRows(); });
 function goHome() {
   if (!(game.home >= 0)) { note('Rent a house first: follow the map to one.', 4); return; }
   if (job.state === 'pickup' || job.state === 'deliver' || job.state === 'count') { note('Finish this errand first, then head home.', 4); return; }
@@ -3881,7 +3907,7 @@ function openPlaces() {
     const icw = document.createElement('span'); icw.className = 'icw'; icw.append(ic); // (the wrapper carries the shadow, since the icon itself is cut to shape)
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.name;
     b.append(icw, nm); // just the icon and its name
-    b.addEventListener('click', () => { if (ring.moved > 8) return; closePlaces(); if (p.errand) { openErrand(); return; } if (p.id === 'hospital' && game.hurt) { treat(); return; } if (p.chat) { if (who) chatWith(who); else note('No one is near enough to chat with.'); return; } if (p.id === 'home') goHome(); ui.dest = p.id === 'home' ? null : { name: p.name, x: at[0], z: at[1] }; }); return b; }));
+    b.addEventListener('click', () => { if (ring.moved > 8) return; closePlaces(); if (p.errand) { openErrand(); return; } if (p.id === 'hospital' && game.hurt) { treat(); return; } if (p.chat) { if (who) chatWith(who); else note('No one is near enough to chat with.'); return; } if (p.id === 'furniture') { openFurn(); return; } if (p.id === 'home') goHome(); ui.dest = p.id === 'home' ? null : { name: p.name, x: at[0], z: at[1] }; }); return b; }));
   ring.at = 0; ring.v = 0; ring.free = false; $('places').classList.remove('dragging'); setRing(); $('places').hidden = false;
 }
 function closePlaces() { $('places').hidden = true; ui.busy = false; }
@@ -4529,7 +4555,7 @@ function hzTick(dt) {
   if (on && !ui.busy && now > hzNext && more && chase.st === 'off') { hzNext = now + 7000; hzSpawn(); }
   for (let i = hz.length - 1; i >= 0; i--) {
     const h = hz[i], dx = hero.x - h.x, dz = hero.z - h.z, d = Math.hypot(dx, dz) || 0.001, held = h.state === 'stop' || h.state === 'talk' || h.state === 'hold';
-    if ((!on && !held) || d > 80) { if (h.state === 'stop') ui.busy = false; h.mixer.stopAllAction(); h.mixer.uncacheRoot(h.inner); scene.remove(h.obj); hz.splice(i, 1); continue; }
+    if ((!on && !held) || d > 80) { if (h.state === 'stop') ui.busy = false; h.mixer.stopAllAction(); h.mixer.uncacheRoot(h.inner); scene.remove(h.obj); freeSkins(h.obj); hz.splice(i, 1); continue; }
     let sp = 0, gx = 0, gz = 0; const ok = on && more && !ui.busy && !(hero.down > 0) && !(hero.free > 0) && job.bend <= 0;
     if (h.state === 'wait' && d < (h.type === 'agbero' ? 15 : 18) && ok && chase.st === 'off') {   /* (nobody steps out in front of a police chase) */ h.state = 'come'; h.t = 0; if (h.type === 'police') chime([2350, 2350, 2350], 'square', 0.16, 0.13, 0.035); } // the officer blows his whistle
     if (h.state === 'come') { h.t += dt;
@@ -4965,6 +4991,12 @@ function doorReach() { // at the car door: the hand nearer the door goes out to 
   const fo = rig.fore.find((q) => under(q, best)), hd = fo && rig.hands.find((q) => under(q, fo)); if (!fo || !hd) return;
   best.getWorldPosition(_r0); aimBone(best, fo, _r1.copy(_r6).sub(_r0).normalize(), w * 0.9); fo.getWorldPosition(_r0); aimBone(fo, hd, _r1.copy(_r6).sub(_r0).normalize(), w * 0.9);
 }
+function handReach() { // a hand goes out to something (a door handle): hero.reachAt is where, hero.reach how far along the reach is
+  const w = hero.reach || 0; if (w < 0.02 || !hero.reachAt) return; const rig = rigOf(), under = (b, top) => { for (let q = b; q; q = q.parent) if (q === top) return true; return false; }; hero.model.updateMatrixWorld(true);
+  _r6.fromArray(hero.reachAt); let best = null, bd = Infinity; for (const a of rig.arms) { const dd = a.getWorldPosition(_r0).distanceTo(_r6); if (dd < bd) { bd = dd; best = a; } } if (!best) return;
+  const fo = rig.fore.find((q) => under(q, best)), hd = fo && rig.hands.find((q) => under(q, fo)); if (!fo || !hd) return;
+  best.getWorldPosition(_r0); aimBone(best, fo, _r1.copy(_r6).sub(_r0).normalize(), w * 0.85); fo.getWorldPosition(_r0); aimBone(fo, hd, _r1.copy(_r6).sub(_r0).normalize(), w * 0.85);
+}
 function legOver() { // climbing onto a bicycle or scooter (and off it): the outer leg swings up and over, as it does in life
   if (!ride.on || ride.id === 'car' || (ride.st !== 'mount' && ride.st !== 'dismount')) return; const rig = rigOf(); if (rig.thighs.length < 2) return;
   const lift = Math.sin(Math.PI * clamp((ride.k - 0.1) / 0.75, 0, 1)) * 1.1; if (lift < 0.01) return;
@@ -5129,12 +5161,25 @@ function updateJourney(dt) {
   for (const st of RENT) {
     if (!st || !st.g.parent || (hero.x - st.cx) ** 2 + (hero.z - st.cz) ** 2 > 90 * 90) continue;
     if (!st.npc && kinds.length === KINDS && st.state !== 'home') makeNpc(st);
-    if (st.npc && st.state === 'home' && !ui.busy) { st.rg.remove(st.npc.obj); st.npc = null; } // once the house is yours nobody stands at your door
+    if (st.npc && st.state === 'home' && !ui.busy) { st.rg.remove(st.npc.obj); freeSkins(st.npc.obj); st.npc = null; } // once the house is yours nobody stands at your door
     const open = st.state === 'wait' || st.state === 'coming' ? 0 : 1, ease = (v) => v * v * (3 - 2 * v);
     st.gateOpen = clamp(st.gateOpen + Math.sign(open - st.gateOpen) * dt / 0.9, 0, 1); st.doorOpen = clamp(st.doorOpen + (st.state === 'home' ? dt / 0.9 : 0), 0, 1);
     st.gate.rotation.y = st.s * 1.7 * ease(st.gateOpen);
-    { const me = lotOf(st, hero.x, hero.z, _lot), by = st.state === 'home' && hero.level === 0 && Math.abs(me.lat) < 1.8 && Math.abs(me.dep - st.sb) < 2.4; // your front door opens as you come up to it, from either side, and shuts again behind you
-      st.doorT = clamp((st.doorT || 0) + (by ? 1 : -1) * dt / 0.45, 0, 1); st.door.rotation.y = st.s * 1.85 * ease(st.doorT); }
+    { // Your front door stays shut. Come right up to it, on either side, and the button offers to open it: you reach for the handle, the
+      // door swings open (the door alone, in its frame), you walk through, and it shuts behind you.
+      const me = lotOf(st, hero.x, hero.z, _lot), hzd = me.dep - st.sb - 0.22, G = st.go;
+      if (!G && st.state === 'home' && hero.level === 0 && !ui.busy && Math.abs(me.lat) < 0.95 && hzd > -1.9 && hzd < 1.7 && !(ride.on)) { const out = hzd < -0.1;
+        act = { label: 'Open the door', far: 0, run: () => { st.go = { t: 0, from: [me.dep, me.lat], to: [st.sb + 0.22 + (out ? 1.25 : -1.45), 0], mid: [st.sb + 0.22 + (out ? -0.95 : 0.8), 0] }; ui.busy = true; chime([520, 660], 'triangle', 0.06, 0.1, 0.05); } }; }
+      if (G) { G.t += dt; const put = (dep, lat) => { _v.set(st.s * (F + dep), 0, lat).applyMatrix4(st.world); return [_v.x, _v.z]; }, sm = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+        const d1 = Math.hypot(G.mid[0] - G.from[0], G.mid[1] - G.from[1]), d2 = Math.hypot(G.to[0] - G.mid[0], G.to[1] - G.mid[1]), v = 1.5, t1 = d1 / v, tOpen = t1 + 0.75, t2 = tOpen + d2 / v, tEnd = t2 + 0.55;
+        let dep, lat; if (G.t < t1) { const k = G.t / Math.max(1e-3, t1); dep = lerp(G.from[0], G.mid[0], k); lat = lerp(G.from[1], G.mid[1], k); } else if (G.t < tOpen) { dep = G.mid[0]; lat = G.mid[1]; } else { const k = clamp((G.t - tOpen) / Math.max(1e-3, t2 - tOpen), 0, 1); dep = lerp(G.mid[0], G.to[0], k); lat = lerp(G.mid[1], G.to[1], k); }
+        const p = put(dep, lat), q = put(G.to[0], G.to[1]); hero.heading += angDiff(Math.atan2(q[0] - p[0], q[1] - p[1]), hero.heading) * Math.min(1, dt * 8); hero.x = p[0]; hero.z = p[1];
+        hero.auto = (G.t < t1 && d1 > 0.05) || (G.t >= tOpen && G.t < t2) ? v : 0.001;                                      /* walking, or standing while the door swings */
+        hero.reach = G.t >= t1 - 0.15 && G.t < tOpen ? Math.sin(Math.PI * clamp((G.t - t1 + 0.15) / 0.9, 0, 1)) : 0; if (hero.reach) { const h = put(st.sb + 0.11, 0.42); hero.reachAt = [h[0], hero.y + 1.05, h[1]]; }   /* a hand to the handle */
+        st.doorT = sm((G.t - t1 - 0.15) / 0.6) * (1 - sm((G.t - t2) / 0.5));
+        if (G.t >= tEnd) { st.go = null; st.doorT = 0; hero.auto = 0; hero.reach = 0; ui.busy = false; }
+      } else st.doorT = 0;
+      st.door.rotation.y = st.s * 1.75 * st.doorT; }
     const L = lotOf(st, hero.x, hero.z, _lot), n = st.npc;
     if (n) { // the landlord walks to where they are needed, then turns to you (or to the street)
       const [gd, gl] = npcSpot(st), dx = gd - n.dep, dz = gl - n.lat, dist = Math.hypot(dx, dz); let v = 0, face = -st.s * Math.PI / 2;
@@ -5207,7 +5252,7 @@ function frame() {
     if (!locate(hero.x, hero.z, lim)) { hero.x = ox; hero.z = oz; speed = 0; }
     if (look.id === null) camYaw += angDiff(hero.heading, camYaw) * Math.min(1, dt * 1.3); // camera swings round behind you
   }
-  hero.speed += (speed - hero.speed) * Math.min(1, dt * 8);
+  hero.speed += ((hero.auto || speed) - hero.speed) * Math.min(1, dt * 8);   /* (hero.auto: he is walking by himself, through a door say) */
   const here = locate(hero.x, hero.z, F);
   hero.level = here && here.level !== undefined ? here.level : 0; // which floor of a house you are on (0 anywhere else)
   if (here) { hero.y += (here.y - hero.y) * Math.min(1, dt * 12); }
@@ -5222,7 +5267,7 @@ function frame() {
     hero.mixer.update(dt);
     hero.model.position.x = hero.baseX || 0; hero.model.position.z = hero.baseZ || 0;
     if (hero.lifts) hero.model.position.y = hero.baseY + (hero.w[0] * hero.lifts[0] + hero.w[1] * hero.lifts[1] + hero.w[2] * hero.lifts[2]) / Math.max(0.001, hero.w[0] + hero.w[1] + hero.w[2]);
-    errandPose(dt); ridePose(); legOver(); doorReach(); rideCarry();
+    errandPose(dt); ridePose(); legOver(); doorReach(); handReach(); rideCarry();
   }
   downTick(dt);
 
@@ -5281,7 +5326,7 @@ function sharpness(now) {
   if (pr !== SHARP.pr) { SHARP.pr = pr; renderer.setPixelRatio(pr); viewAt = ''; fitCamera(); }
 }
 function loop(now) { now = now || performance.now(); fitRes(now); sharpness(now); frame(); requestAnimationFrame(loop); }
-if (location.hash.includes('dbg')) window.__dbg = { SHARP, goHome, restDay, rideFall, carDoorSpot, carSteps, join, openJoin, joinNext, CAR_PAINTS, chase, chaseTick, chaseAim, VEH, STYLES, POLICE_CARS, setStyle, styleOf, applyStyle, logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, rideModel, rideTris, makeRideArt, RIDE_PIC, RIDE_TPL, openPicker, pickAsk, pickBuy, pickStart, moneyCount, save, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, ride, RIDE_DIM, zoneAt, rideFits, rideBad, ridePlan, rideLead, stancePace, rideClear, STREETS, RUN_AT, cam: (y) => { camYaw = y; }, rideObj, rideCall, rideOn, rideOff, rideEnd, kerbSpot, makeOffers, endErrand, closeErrand, becomeHero, joy, keys, parcel, HEROES, get camYaw() { return camYaw; },
+if (location.hash.includes('dbg')) window.__dbg = { SHARP, openFurn, goHome, restDay, rideFall, carDoorSpot, carSteps, join, openJoin, joinNext, CAR_PAINTS, chase, chaseTick, chaseAim, VEH, STYLES, POLICE_CARS, setStyle, styleOf, applyStyle, logic, CONFIG, treat, carHit, hz, hzMake, hzSpawn, AGB, POLICE, BLD, ADDR, job, openErrand, rideModel, rideTris, makeRideArt, RIDE_PIC, RIDE_TPL, openPicker, pickAsk, pickBuy, pickStart, moneyCount, save, get rig() { return rigOf(); }, addFurniture, CATALOG, composer, aoPass, FMODEL, PACKS, packMount, game, RENT, ui, sfx, signal, THREE, SkeletonUtils, scene, kinds, hero, people, cars, carKinds, zones, cells, jobs, camera, renderer, locate, PITCH, RW, F, MID, laneDir, frame, ride, RIDE_DIM, zoneAt, rideFits, rideBad, ridePlan, rideLead, stancePace, rideClear, STREETS, RUN_AT, cam: (y) => { camYaw = y; }, rideObj, rideCall, rideOn, rideOff, rideEnd, kerbSpot, makeOffers, endErrand, closeErrand, becomeHero, joy, keys, parcel, HEROES, get camYaw() { return camYaw; },
   quickRun: (id = 'walk') => { /* testing: own this ride (bought the proper way, with money given for it), skip the cards and begin the countdown */
     if ((job.state !== 'idle' && job.state !== 'offer') || !CONFIG.transport[id]) return false; closeErrand(); job.offers = makeOffers(); if (!job.offers || !job.offers[id]) return false;
     job.offer = job.offers[id]; job.state = 'offer'; ui.busy = true; job.pick = RIDES.indexOf(id); errandEl.hidden = false; bendErrand();
